@@ -16,7 +16,7 @@ except ImportError:
 def normalize(x, stats):
     if stats is None:
         return x
-    return (x - stats.mean) / (stats.std + 1e-8)
+    return (tf.cast(x, dtype='float32') - stats.mean) / (stats.std + 1e-8)
 
 
 def denormalize(x, stats):
