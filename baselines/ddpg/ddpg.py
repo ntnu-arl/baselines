@@ -139,6 +139,7 @@ def learn(network, env,
                 # if simulating multiple envs in parallel, impossible to reset agent at the end of the episode in each
                 # of the environments, so resetting here instead
                 agent.reset()
+            env.generate_new_goal()
             for t_rollout in range(nb_rollout_steps):
                 # Predict next action.
                 action, q, _, _ = agent.step(tf.constant(obs), apply_noise=True, compute_Q=True)
@@ -149,13 +150,15 @@ def learn(network, env,
                     env.render()
 
                 # max_action is of dimension A, whereas action is dimension (nenvs, A) - the multiplication gets broadcasted to the batch
-                new_obs, r, done, info = env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
+                # new_obs, r, done, info = env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])                
                 # note these outputs are batched from vecenv
                 
                 # MODIFY
-                #publish action to rotors 
-                #receive new_obs
-                #calculate r, done
+                env.step(max_action * action)
+                env.clear_state_action_flag()
+                while (not received_new_state_action()):
+                    time.sleep(0.001)
+                new_obs, r, done, info = env.get_state_action()
 
                 t += 1
                 if rank == 0 and render:
@@ -169,9 +172,10 @@ def learn(network, env,
                 agent.store_transition(obs, action, r, new_obs, done) #the batched data will be unrolled in memory.py's append.
 
                 obs = new_obs
-
+                reset_env = False
                 for d in range(len(done)):
                     if done[d]:
+                        reset_env = True
                         # Episode done.
                         epoch_episode_rewards.append(episode_reward[d])
                         episode_rewards_history.append(episode_reward[d])
@@ -182,7 +186,9 @@ def learn(network, env,
                         episodes += 1
                         if nenvs == 1:
                             agent.reset()
-
+                if (reset_env):
+                    env.reset()
+                    break
 
             # Train.
             epoch_actor_losses = []

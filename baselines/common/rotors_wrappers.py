@@ -85,9 +85,10 @@ class RotorsWrappers:
         command.angular_rates.x = 0.0
         command.angular_rates.y = 0.0
         command.angular_rates.z = 0.0
-        command.thrust.x = action[0]
-        command.thrust.y = action[1]
-        command.thrust.z = action[2]
+        # action = np.array([[.]])
+        command.thrust.x = action[0][0]
+        command.thrust.y = action[0][1]
+        command.thrust.z = action[0][2]
         self.cmd_publisher.publish(command)
 
     def state_action_callback(self, data):
@@ -108,22 +109,23 @@ class RotorsWrappers:
 
     def get_state_action(self):
         data = self.state_action_msg
-        # one env -> numpy.array([[.]])
-        self.new_obs = np.array([[data.next_goal_odom.pose.pose.position.x,
+
+        self.new_obs = np.array([data.next_goal_odom.pose.pose.position.x,
         data.next_goal_odom.pose.pose.position.y,
         data.next_goal_odom.pose.pose.position.z,
         data.next_goal_odom.twist.twist.linear.x,
         data.next_goal_odom.twist.twist.linear.y,
-        data.next_goal_odom.twist.twist.linear.z]])
+        data.next_goal_odom.twist.twist.linear.z])
 
+        # unnormalized actions
         self.action = np.array([action.thrust.x, action.thrust.y, action.thrust.z])
 
-        self.obs = np.array([[data.goal_odom.pose.pose.position.x,
+        self.obs = np.array([data.goal_odom.pose.pose.position.x,
         data.goal_odom.pose.pose.position.y,
         data.goal_odom.pose.pose.position.z,
         data.goal_odom.twist.twist.linear.x,
         data.goal_odom.twist.twist.linear.y,
-        data.goal_odom.twist.twist.linear.z]])
+        data.goal_odom.twist.twist.linear.z])
 
         Qx = Q_state.dot(self.new_obs)
         xT_Qx = self.new_obs.transpose().dot(Qx)
@@ -138,17 +140,18 @@ class RotorsWrappers:
             self.info = {'status':'reach goal'}
 
         # collide?
-        # if self.collide:
-        #     self.reward = self.reward - self.obstacle_max_penalty
-        #     self.done = True
-        #     self.info = {'status':'collide'}
+        if self.collide:
+            #self.reward = self.reward - self.obstacle_max_penalty
+            self.done = True
+            self.info = {'status':'collide'}
 
         # time out?
         if self.timeout:
             self.done = True
             self.info = {'status':'timeout'}
 
-        return (self.new_obs, self.reward, self.done, self.info)
+        # fake multiple environments -> return np.array([[.]])
+        return (np.array([self.new_obs]), np.array([self.reward]), np.array([self.done]), np.array([self.info]))
 
     def contact_callback(self, msg):
         # Check inside the models states for robot's contact state
@@ -264,6 +267,9 @@ class RotorsWrappers:
         goal.header.stamp = rospy.Time.now()
         self.goal_init_publisher.publish(goal)
         return np.array([[state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0]])
+
+    def render(self):
+        return None
 
 if __name__ == '__main__':
 
