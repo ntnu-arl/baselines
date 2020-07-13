@@ -108,21 +108,22 @@ class RotorsWrappers:
 
     def get_state_action(self):
         data = self.state_action_msg
-        self.new_obs = np.array([data.next_goal_odom.pose.pose.position.x,
+        # one env -> numpy.array([[.]])
+        self.new_obs = np.array([[data.next_goal_odom.pose.pose.position.x,
         data.next_goal_odom.pose.pose.position.y,
         data.next_goal_odom.pose.pose.position.z,
         data.next_goal_odom.twist.twist.linear.x,
         data.next_goal_odom.twist.twist.linear.y,
-        data.next_goal_odom.twist.twist.linear.z])
+        data.next_goal_odom.twist.twist.linear.z]])
 
         self.action = np.array([action.thrust.x, action.thrust.y, action.thrust.z])
 
-        self.obs = np.array([data.goal_odom.pose.pose.position.x,
+        self.obs = np.array([[data.goal_odom.pose.pose.position.x,
         data.goal_odom.pose.pose.position.y,
         data.goal_odom.pose.pose.position.z,
         data.goal_odom.twist.twist.linear.x,
         data.goal_odom.twist.twist.linear.y,
-        data.goal_odom.twist.twist.linear.z])
+        data.goal_odom.twist.twist.linear.z]])
 
         Qx = Q_state.dot(self.new_obs)
         xT_Qx = self.new_obs.transpose().dot(Qx)
@@ -137,15 +138,15 @@ class RotorsWrappers:
             self.info = {'status':'reach goal'}
 
         # collide?
-        if self.collide:
-            self.reward = self.reward - self.obstacle_max_penalty
-            self.done = True
-            self.info = {'status':'collide'}
+        # if self.collide:
+        #     self.reward = self.reward - self.obstacle_max_penalty
+        #     self.done = True
+        #     self.info = {'status':'collide'}
 
         # time out?
-        # if self.timeout:
-        #     self.done = True
-        #     self.info = {'status':'timeout'}
+        if self.timeout:
+            self.done = True
+            self.info = {'status':'timeout'}
 
         return (self.new_obs, self.reward, self.done, self.info)
 
@@ -201,7 +202,7 @@ class RotorsWrappers:
         self.goal_training_publisher.publish(goal)
 
         self.timeout_timer = rospy.Timer(
-            rospy.Duration(self.goal_generation_radius * 10), self.timer_callback, oneshot=True)
+            rospy.Duration(self.goal_generation_radius * 20), self.timer_callback, oneshot=True)
         return
 
     def timer_callback(self):
@@ -262,7 +263,7 @@ class RotorsWrappers:
         self.unpause_physics_proxy(EmptyRequest())
         goal.header.stamp = rospy.Time.now()
         self.goal_init_publisher.publish(goal)
-        return np.array([state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0])
+        return np.array([[state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0]])
 
 if __name__ == '__main__':
 
