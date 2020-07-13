@@ -17,6 +17,7 @@ from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from baselines.common import retro_wrappers
+from baselines.common import rotors_wrappers
 
 def make_vec_env(env_id, env_type, num_env, seed,
                  wrapper_kwargs=None,
@@ -60,6 +61,9 @@ def make_env(env_id, env_type, mpi_rank=0, subrank=0, seed=None, reward_scale=1.
         import retro
         gamestate = gamestate or retro.State.DEFAULT
         env = retro_wrappers.make_retro(game=env_id, max_episode_steps=10000, use_restricted_actions=retro.Actions.DISCRETE, state=gamestate)
+    elif env_type == 'rotors':
+        print('make_env: Create RotorS env')
+        env = RotorsWrappers()
     else:
         env = gym.make(env_id)
 

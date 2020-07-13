@@ -100,7 +100,8 @@ def build_env(args):
             frame_stack_size = 4
             env = make_vec_env(env_id, env_type, nenv, seed, gamestate=args.gamestate, reward_scale=args.reward_scale)
             env = VecFrameStack(env, frame_stack_size)
-
+    elif env_type == 'rotors':
+        env = make_env(env_id, env_type, seed=seed)
     else:
         flatten_dict_observations = alg not in {'her'}
         env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, flatten_dict_observations=flatten_dict_observations)
@@ -116,6 +117,9 @@ def get_env_type(args):
 
     if args.env_type is not None:
         return args.env_type, env_id
+
+    if env_id == 'rotors-rmf':
+        return 'rotors','rotors-rmf'
 
     # Re-parse the gym registry, since we could have new envs since last time.
     for env in gym.envs.registry.all():

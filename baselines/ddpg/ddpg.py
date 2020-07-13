@@ -151,6 +151,11 @@ def learn(network, env,
                 # max_action is of dimension A, whereas action is dimension (nenvs, A) - the multiplication gets broadcasted to the batch
                 new_obs, r, done, info = env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
                 # note these outputs are batched from vecenv
+                
+                # MODIFY
+                #publish action to rotors 
+                #receive new_obs
+                #calculate r, done
 
                 t += 1
                 if rank == 0 and render:
