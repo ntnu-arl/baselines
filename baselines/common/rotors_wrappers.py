@@ -217,6 +217,18 @@ class RotorsWrappers:
             rospy.Duration(self.goal_generation_radius * 20), self.timer_callback, oneshot=True)
         return
 
+    def stop_robot(self):
+        # make the robot stay at current position
+        goal = Pose()
+        goal.position.x = 0
+        goal.position.y = 0
+        goal.position.z = 0
+        goal.orientation.x = 0
+        goal.orientation.y = 0
+        goal.orientation.z = 0
+        goal.orientation.w = 1
+        self.goal_init_publisher.publish(goal)
+
     def timer_callback(self):
         self.timeout = True
 
@@ -226,13 +238,21 @@ class RotorsWrappers:
     def get_goal_generation_radius(self):
         return self.goal_generation_radius
 
+    def pause(self):
+        rospy.loginfo('Pausing physics')
+        self.pause_physics_proxy(EmptyRequest())
+
+    def unpause(self):
+        rospy.loginfo('Unpausing physics')
+        self.unpause_physics_proxy(EmptyRequest())                    
+
     def reset(self):
         rospy.loginfo('Pausing physics')
         self.pause_physics_proxy(EmptyRequest())
 
         # randomize initial position (TODO: angle?, velocity?)
-        state_high = np.array([10.0, 10.0, 3.0], dtype=np.float32)
-        state_low = np.array([-10.0, -10.0, 2.0], dtype=np.float32)
+        state_high = np.array([1.0, 1.0, 3.0], dtype=np.float32)
+        state_low = np.array([-1.0, -1.0, 2.0], dtype=np.float32)
         state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
 
         # Fill in the new position of the robot
@@ -263,18 +283,6 @@ class RotorsWrappers:
         rospy.loginfo('Unpausing physics')
         self.unpause_physics_proxy(EmptyRequest())
         
-        # # wait for robot to get new odometry after reset
-        # time.sleep(0.02)
-        # # make the robot stay at current position
-        # goal = Pose()
-        # goal.position.x = 0
-        # goal.position.y = 0
-        # goal.position.z = 0
-        # goal.orientation.x = 0
-        # goal.orientation.y = 0
-        # goal.orientation.z = 0
-        # goal.orientation.w = 1
-        # self.goal_init_publisher.publish(goal)
         return np.array([state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0])
 
     def render(self):

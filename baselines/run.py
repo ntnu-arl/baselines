@@ -104,13 +104,13 @@ def build_env(args):
             frame_stack_size = 4
             env = make_vec_env(env_id, env_type, nenv, seed, gamestate=args.gamestate, reward_scale=args.reward_scale)
             env = VecFrameStack(env, frame_stack_size)
-    # elif env_type == 'rotors':
-    #     env = make_env(env_id, env_type, seed=seed)
-    else: # 'rotors' is here
+    elif env_type == 'rotors':
+        env = make_env(env_id, env_type, seed=seed)
+    else:
         flatten_dict_observations = alg not in {'her'}
         env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, flatten_dict_observations=flatten_dict_observations)
 
-        if (env_type == 'mujoco') or (env_type == 'rotors'):
+        if (env_type == 'mujoco'):
             env = VecNormalize(env)
 
     return env

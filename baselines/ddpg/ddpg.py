@@ -113,6 +113,7 @@ def learn(network, env,
     agent.reset()
 
     obs = env.reset()
+    obs = np.array([obs])
     if eval_env is not None:
         eval_obs = eval_env.reset()
     nenvs = obs.shape[0]
@@ -141,8 +142,8 @@ def learn(network, env,
                 # of the environments, so resetting here instead
                 agent.reset()
             # unpause rotors
-
-            #env.generate_new_goal()
+            env.unpause()
+            env.generate_new_goal()
             for t_rollout in range(nb_rollout_steps):
                 # Predict next action.
                 action, q, _, _ = agent.step(tf.constant(obs), apply_noise=True, compute_Q=True)
@@ -155,6 +156,10 @@ def learn(network, env,
                 # max_action is of dimension A, whereas action is dimension (nenvs, A) - the multiplication gets broadcasted to the batch
                 new_obs, r, done, info = env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])                
                 # note these outputs are batched from vecenv
+                new_obs = np.array([new_obs])
+                r = np.array([r])
+                done = np.array([done])
+                info = np.array([info])
 
                 t += 1
                 if rank == 0 and render:
@@ -184,9 +189,12 @@ def learn(network, env,
                             agent.reset()
                 if (reset_env):
                     env.reset()
-                    #break
+                    time.sleep(0.02) # wait for robot to get new odometry
+                    obs, _, _, _ = env.get_state_action()
+                    obs = np.array([obs])
+                    break
             # pause rotors for training
-             
+            env.pause() 
             # Train.
             epoch_actor_losses = []
             epoch_critic_losses = []
