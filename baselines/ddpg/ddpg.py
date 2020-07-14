@@ -24,7 +24,8 @@ def learn(network, env,
           total_timesteps=None,
           nb_epochs=None, # with default settings, perform 1M steps total
           nb_epoch_cycles=20,
-          nb_rollout_steps=100,
+          #nb_rollout_steps=100,
+          nb_rollout_steps=1000, # odometry 100hz -> 10s
           reward_scale=1.0,
           render=False,
           render_eval=False,
@@ -139,7 +140,9 @@ def learn(network, env,
                 # if simulating multiple envs in parallel, impossible to reset agent at the end of the episode in each
                 # of the environments, so resetting here instead
                 agent.reset()
-            env.generate_new_goal()
+            # unpause rotors
+
+            #env.generate_new_goal()
             for t_rollout in range(nb_rollout_steps):
                 # Predict next action.
                 action, q, _, _ = agent.step(tf.constant(obs), apply_noise=True, compute_Q=True)
@@ -181,8 +184,9 @@ def learn(network, env,
                             agent.reset()
                 if (reset_env):
                     env.reset()
-                    break
-
+                    #break
+            # pause rotors for training
+             
             # Train.
             epoch_actor_losses = []
             epoch_critic_losses = []

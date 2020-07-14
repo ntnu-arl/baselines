@@ -156,12 +156,12 @@ class RotorsWrappers:
             self.info = {'status':'collide'}
 
         # time out?
-        if self.timeout:
-            self.done = True
-            self.info = {'status':'timeout'}
+        # if self.timeout:
+        #     self.done = True
+        #     self.info = {'status':'timeout'}
 
         # fake multiple environments -> return np.array([[.]])
-        return (np.array([self.new_obs]), np.array([self.reward]), np.array([self.done]), np.array([self.info]))
+        return (self.new_obs, self.reward, self.done, self.info)
 
     def contact_callback(self, msg):
         # Check inside the models states for robot's contact state
@@ -260,20 +260,22 @@ class RotorsWrappers:
         self.done = False
         self.received_state_action = False
 
-        # not on the ground initially
-        goal = Pose()
-        goal.position.x = 0
-        goal.position.y = 0
-        goal.position.z = 2 # move up 2m in vehicle frame
-        goal.orientation.x = 0
-        goal.orientation.y = 0
-        goal.orientation.z = 0
-        goal.orientation.w = 1
-
         rospy.loginfo('Unpausing physics')
         self.unpause_physics_proxy(EmptyRequest())
-        self.goal_init_publisher.publish(goal)
-        return np.array([[state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0]])
+        
+        # # wait for robot to get new odometry after reset
+        # time.sleep(0.02)
+        # # make the robot stay at current position
+        # goal = Pose()
+        # goal.position.x = 0
+        # goal.position.y = 0
+        # goal.position.z = 0
+        # goal.orientation.x = 0
+        # goal.orientation.y = 0
+        # goal.orientation.z = 0
+        # goal.orientation.w = 1
+        # self.goal_init_publisher.publish(goal)
+        return np.array([state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0])
 
     def render(self):
         return None
