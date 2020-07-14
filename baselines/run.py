@@ -1,3 +1,7 @@
+#!/home/huan/anaconda3/envs/tf-gpu/bin/python
+import rospy
+from baselines.common.rotors_wrappers import RotorsWrappers
+
 import sys
 import re
 import multiprocessing
@@ -197,6 +201,9 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(args):
+    # ROS stuff
+    rospy.init_node('RL_node', anonymous=True, log_level=rospy.FATAL)
+
     # configure logger, disable logging in child MPI processes (with rank > 0)
 
     arg_parser = common_arg_parser()

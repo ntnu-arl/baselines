@@ -1,10 +1,13 @@
+import time
 import rospy
 import numpy as np
-from StateAction.msg import StateAction
+import random
+from rotors_control.msg import StateAction
 from mav_msgs.msg import RateThrust
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose
 from gazebo_msgs.msg import ContactsState, ModelState
+from std_srvs.srv import Empty, EmptyRequest
 from gym import core, spaces
 from gym.utils import seeding
 
@@ -35,6 +38,8 @@ class RotorsWrappers:
                          np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
                         dtype=np.float32)
         self.observation_space = spaces.Box(low=-state_high, high=state_high, dtype=np.float32)
+        self.reward_range = (-np.inf, np.inf)
+        self.metadata = {"t_start": time.time(), "env_id": "rotors-rmf"}
 
         self.received_state_action = False
         self.obs = None
@@ -68,10 +73,10 @@ class RotorsWrappers:
         self.Q_state = rospy.get_param('Q_state', [60.0, 60.0, 100.0, 15.0, 15.0, 25.0])
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
-        print('Q_state:', Q_state)
+        print('Q_state:', self.Q_state)
         self.R_action = rospy.get_param('R_action', [0.35, 0.35, 5])
         self.R_action = np.diag(self.R_action)
-        print('R_action:', R_action)
+        print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
         self.goal_reward = rospy.get_param('goal_reward', 500.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
@@ -91,10 +96,15 @@ class RotorsWrappers:
         command.thrust.z = action[0][2]
         self.cmd_publisher.publish(command)
 
+        self.clear_state_action_flag()
+        while (not self.received_new_state_action()):
+            time.sleep(0.001)
+        return self.get_state_action()
+
     def state_action_callback(self, data):
         self.msg_cnt = self.msg_cnt + 1
-        if (self.msg_cnt >= 10): # throttle
-        #if (self.msg_cnt >= 1):
+        #if (self.msg_cnt >= 10): # throttle
+        if (self.msg_cnt >= 1):
             self.msg_cnt = 0
             self.state_action_msg = data
             self.received_state_action = True
@@ -118,7 +128,7 @@ class RotorsWrappers:
         data.next_goal_odom.twist.twist.linear.z])
 
         # unnormalized actions
-        self.action = np.array([action.thrust.x, action.thrust.y, action.thrust.z])
+        self.action = np.array([data.action.thrust.x, data.action.thrust.y, data.action.thrust.z])
 
         self.obs = np.array([data.goal_odom.pose.pose.position.x,
         data.goal_odom.pose.pose.position.y,
@@ -127,11 +137,11 @@ class RotorsWrappers:
         data.goal_odom.twist.twist.linear.y,
         data.goal_odom.twist.twist.linear.z])
 
-        Qx = Q_state.dot(self.new_obs)
+        Qx = self.Q_state.dot(self.new_obs)
         xT_Qx = self.new_obs.transpose().dot(Qx)
-        Ru = R_action.dot(self.action)
+        Ru = self.R_action.dot(self.action)
         uT_Ru = self.action.transpose().dot(Ru)
-        self.reward = -x^T_Qx[0] - uT_Ru[0]
+        self.reward = -xT_Qx - uT_Ru
 
         # reach goal?
         if np.linalg.norm(self.new_obs[0:3]) < self.waypoint_radius:
@@ -174,7 +184,6 @@ class RotorsWrappers:
 
         # https://stackoverflow.com/questions/5837572/generate-a-random-point-within-a-circle-uniformly/5838055#5838055
         goal = Pose()
-        goal.header.stamp = rospy.Time.now()
         # sphere_marker_array = MarkerArray()
         u = random.random()
         v = random.random()
@@ -244,9 +253,8 @@ class RotorsWrappers:
         new_position.twist.angular.y = 0
         new_position.twist.angular.z = 0
         rospy.loginfo('Placing robot')
-        self.model_state_pub.publish(new_position)
+        self.model_state_publisher.publish(new_position)
 
-        self.reset_timer()
         self.collide = False
         self.timeout = False
         self.done = False
@@ -264,12 +272,14 @@ class RotorsWrappers:
 
         rospy.loginfo('Unpausing physics')
         self.unpause_physics_proxy(EmptyRequest())
-        goal.header.stamp = rospy.Time.now()
         self.goal_init_publisher.publish(goal)
         return np.array([[state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0]])
 
     def render(self):
         return None
+
+    def close(self):
+        pass    
 
 if __name__ == '__main__':
 

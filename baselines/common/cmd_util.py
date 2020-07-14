@@ -3,6 +3,8 @@ Helpers for scripts like run_atari.py.
 """
 
 import os
+from baselines.common.rotors_wrappers import RotorsWrappers
+
 try:
     from mpi4py import MPI
 except ImportError:
