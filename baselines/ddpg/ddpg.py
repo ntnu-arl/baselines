@@ -24,8 +24,7 @@ def learn(network, env,
           total_timesteps=None,
           nb_epochs=None, # with default settings, perform 1M steps total
           nb_epoch_cycles=20,
-          #nb_rollout_steps=100,
-          nb_rollout_steps=1000, # odometry 100hz -> 10s
+          nb_rollout_steps=100,
           reward_scale=1.0,
           render=False,
           render_eval=False,
@@ -40,8 +39,8 @@ def learn(network, env,
           clip_norm=None,
           nb_train_steps=50, # per epoch cycle and MPI worker,
           nb_eval_steps=100,
-          batch_size=64, # per MPI worker
-          tau=0.01,
+          batch_size=128, # per MPI worker
+          tau=0.001,
           eval_env=None,
           param_noise_adaption_interval=50,
           load_path=None,
@@ -64,8 +63,8 @@ def learn(network, env,
     assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
 
     memory = Memory(limit=int(1e6), action_shape=env.action_space.shape, observation_shape=env.observation_space.shape)
-    critic = Critic(nb_actions, ob_shape=env.observation_space.shape, network=network, **network_kwargs)
-    actor = Actor(nb_actions, ob_shape=env.observation_space.shape, network=network, **network_kwargs)
+    critic = Critic(nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_critic', **network_kwargs)
+    actor = Actor(nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_actor', **network_kwargs)
 
     action_noise = None
     param_noise = None
@@ -191,7 +190,7 @@ def learn(network, env,
                             agent.reset()
                 if (reset_env):
                     env.reset()
-                    time.sleep(0.04) # wait for robot to get new odometry
+                    time.sleep(0.1) # wait for robot to get new odometry
                     obs, _, _, _ = env.get_state_action()
                     obs = np.array([obs])
                     #print('info:', info)

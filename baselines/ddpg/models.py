@@ -14,7 +14,7 @@ class Model(tf.keras.Model):
 
 
 class Actor(Model):
-    def __init__(self, nb_actions, ob_shape, name='actor', network='mlp', **network_kwargs):
+    def __init__(self, nb_actions, ob_shape, name='actor', network='mlp_rmf_actor', **network_kwargs):
         super().__init__(name=name, network=network, **network_kwargs)
         self.nb_actions = nb_actions
         self.network_builder = get_network_builder(network)(**network_kwargs)(ob_shape)
@@ -29,7 +29,7 @@ class Actor(Model):
 
 
 class Critic(Model):
-    def __init__(self, nb_actions, ob_shape, name='critic', network='mlp', **network_kwargs):
+    def __init__(self, nb_actions, ob_shape, name='critic', network='mlp_rmf_critic', **network_kwargs):
         super().__init__(name=name, network=network, **network_kwargs)
         self.layer_norm = True
         self.network_builder = get_network_builder(network)(**network_kwargs)((ob_shape[0] + nb_actions,))

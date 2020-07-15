@@ -37,9 +37,12 @@ class RotorsWrappers:
         # Imitiate Gym variables
         action_high = np.array([self.MAX_ACC_X, self.MAX_ACC_Y, self.MAX_ACC_Z], dtype=np.float32)
         self.action_space = spaces.Box(low=-action_high, high=action_high, dtype=np.float32)
-        state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
-                         np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
-                        dtype=np.float32)
+        # state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
+        #                  np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
+        #                 dtype=np.float32)
+        state_high = np.array([5.0, 5.0, 5.0,
+                    5.0, 5.0, 5.0],
+                    dtype=np.float32)
         self.observation_space = spaces.Box(low=-state_high, high=state_high, dtype=np.float32)
         self.reward_range = (-np.inf, np.inf)
         self.metadata = {"t_start": time.time(), "env_id": "rotors-rmf"}
@@ -76,19 +79,21 @@ class RotorsWrappers:
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [60.0, 60.0, 100.0, 15.0, 15.0, 25.0])
+        #self.Q_state = rospy.get_param('Q_state', [60.0, 60.0, 100.0, 15.0, 15.0, 25.0])
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.0, 0.0, 0.0])
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
-        self.R_action = rospy.get_param('R_action', [0.35, 0.35, 5])
+        self.R_action = rospy.get_param('R_action', [0.0035, 0.0035, 0.05])
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 1000.0)
+        self.goal_reward = rospy.get_param('goal_reward', 100.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1000.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 100.0)
         self.obstacle_th_distance = rospy.get_param('obstacle_th_distance', 0.5)
         self.obstacle_weight = rospy.get_param('obstacle_weight', 0.0)
+        self.far_penalty = rospy.get_param('far_penalty', 100.0)
 
         self.MAX_ACC_X = rospy.get_param('max_acc_x', 1.0)
         self.MAX_ACC_Y = rospy.get_param('max_acc_y', 1.0)
@@ -156,7 +161,8 @@ class RotorsWrappers:
         Qx = self.Q_state.dot(self.new_obs)
         xT_Qx = self.new_obs.transpose().dot(Qx)
         Ru = self.R_action.dot(self.action)
-        uT_Ru = self.action.transpose().dot(Ru)
+        #uT_Ru = self.action.transpose().dot(Ru)
+        uT_Ru = 0.0
         self.reward = -xT_Qx - uT_Ru
 
         self.info = {'status':'none'}
@@ -165,7 +171,6 @@ class RotorsWrappers:
         # reach goal?
         if np.linalg.norm(self.new_obs[0:3]) < self.waypoint_radius:
             self.reward = self.reward + self.goal_reward
-            #self.done = True
             self.generate_new_goal()
             self.info = {'status':'reach goal'}
             print('reach goal!')
@@ -178,16 +183,19 @@ class RotorsWrappers:
             self.info = {'status':'collide'}
 
         # z increases too much?
-        if self.robot_odom.position.z > self.max_z_train:
-            self.reward = self.reward - self.obstacle_max_penalty
-            self.done = True
-            self.info = {'status':'invalid_z'}
+        # if self.robot_odom.position.z > self.max_z_train:
+        #     self.reward = self.reward - self.obstacle_max_penalty
+        #     self.done = True
+        #     self.info = {'status':'invalid_z'}
+        
+        # if np.linalg.norm(self.new_obs[0:3]) > 5 * self.goal_generation_radius:
+        #     self.done = True
+        #     self.info = {'status':'too_far'}
 
         # time out?
         if self.timeout:
             self.timeout = False
-            #self.done = True
-            self.generate_new_goal()
+            self.done = True
             print('timeout')
             self.info = {'status':'timeout'}
 
@@ -223,6 +231,8 @@ class RotorsWrappers:
         while np.isnan(phi):
             phi = np.arccos(2.0 * v - 1.0)
         r = self.goal_generation_radius * np.cbrt(random.random())
+        if r < 0.5:
+            r = 0.5
         sinTheta = np.sin(theta)
         cosTheta = np.cos(theta)
         sinPhi = np.sin(phi)
@@ -233,8 +243,6 @@ class RotorsWrappers:
 
         if (z + self.robot_odom.position.z < 0.5):
             z = 0.5 - self.robot_odom.position.z
-        elif (z + self.robot_odom.position.z > self.max_z_train - 0.5):
-            z = self.max_z_train - 0.5 - self.robot_odom.position.z
 
         rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
         goal.position.x = x
@@ -326,8 +334,8 @@ class RotorsWrappers:
         self.pause_physics_proxy(EmptyRequest())
 
         # randomize initial position (TODO: angle?, velocity?)
-        state_high = np.array([1.0, 1.0, 3.0], dtype=np.float32)
-        state_low = np.array([-1.0, -1.0, 2.0], dtype=np.float32)
+        state_high = np.array([1.0, 1.0, 15.0], dtype=np.float32)
+        state_low = np.array([-1.0, -1.0, 10.0], dtype=np.float32)
         state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
 
         # Fill in the new position of the robot
@@ -367,7 +375,7 @@ class RotorsWrappers:
         #rospy.loginfo('Resetting the timeout timer')
         if (self.timeout_timer != None):
             self.timeout_timer.shutdown()
-            self.timeout_timer = rospy.Timer(rospy.Duration(self.goal_generation_radius * 10), self.timer_callback)
+        self.timeout_timer = rospy.Timer(rospy.Duration(self.goal_generation_radius * 5), self.timer_callback)
 
     def render(self):
         return None
