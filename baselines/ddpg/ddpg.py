@@ -142,7 +142,6 @@ def learn(network, env,
                 agent.reset()
             # unpause rotors
             env.unpause()
-            #env.generate_new_goal()
             print('epoch:', epoch, ', cycle:', cycle)
             for t_rollout in range(nb_rollout_steps):
                 # Predict next action.
@@ -189,13 +188,11 @@ def learn(network, env,
                         if nenvs == 1:
                             agent.reset()
                 if (reset_env):
-                    env.reset()
-                    time.sleep(0.1) # wait for robot to get new odometry
-                    obs, _, _, _ = env.get_state_action()
+                    obs = env.reset()
                     obs = np.array([obs])
                     #print('info:', info)
-                    env.generate_new_goal()
-                    #break
+                    # env.generate_new_goal()
+                    
             # pause rotors for training
             env.pause() 
             # Train.

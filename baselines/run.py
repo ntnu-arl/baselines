@@ -238,18 +238,20 @@ def main(args):
             if state is not None:
                 actions, _, state, _ = model.step(obs)
             else:
-              actions, _, _, _ = model.step(obs)
+                actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions.numpy())
             if not isinstance(env, VecEnv):
                 obs = np.expand_dims(np.array(obs), axis=0)
             episode_rew += rew
-            env.render()
+            #env.render()
             done_any = done.any() if isinstance(done, np.ndarray) else done
             if done_any:
                 for i in np.nonzero(done)[0]:
                     print('episode_rew={}'.format(episode_rew[i]))
                     episode_rew[i] = 0
+                obs = env.reset()    
+                obs = np.array([obs])
 
     env.close()
 

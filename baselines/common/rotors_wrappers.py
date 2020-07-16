@@ -369,7 +369,11 @@ class RotorsWrappers:
         rospy.loginfo('Unpausing physics')
         self.unpause_physics_proxy(EmptyRequest())
 
-        return np.array([state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0])
+        #return np.array([state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0])
+        time.sleep(0.1) # wait for robot to get new odometry
+        obs, _, _, _ = self.get_state_action()
+        self.generate_new_goal() #???
+        return obs        
 
     def reset_timer(self):
         #rospy.loginfo('Resetting the timeout timer')
