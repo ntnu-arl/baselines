@@ -1,26 +1,27 @@
 import time
 import rospy
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 import random
-from rotors_control.msg import StateAction
+import collections
 from mav_msgs.msg import RateThrust
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose
 from gazebo_msgs.msg import ContactsState, ModelState
 from std_srvs.srv import Empty, EmptyRequest
-from gym import core, spaces
-from gym.utils import seeding
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
+from gym import core, spaces
+from gym.utils import seeding
 
 class RotorsWrappers:
     def __init__(self):
         # ROS publishers/subcribers
-        self.state_action_subscriber = rospy.Subscriber("/delta/state_action", StateAction, self.state_action_callback)
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
 
         self.goal_training_publisher = rospy.Publisher("/delta/goal_training", Pose)
+        self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
         self.goal_init_publisher = rospy.Publisher("/delta/goal", Pose)
         self.cmd_publisher = rospy.Publisher("/delta/command/rate_thrust", RateThrust)
         self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=1)
@@ -35,11 +36,11 @@ class RotorsWrappers:
         self.get_params()
 
         # Imitiate Gym variables
-        action_high = np.array([self.MAX_ACC_X, self.MAX_ACC_Y, self.MAX_ACC_Z], dtype=np.float32)
+        action_high = np.array([self.max_acc_x, self.max_acc_y, self.max_acc_z], dtype=np.float32)
         self.action_space = spaces.Box(low=-action_high, high=action_high, dtype=np.float32)
-        # state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
-        #                  np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
-        #                 dtype=np.float32)
+        #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
+        #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
+        #                dtype=np.float32)
         state_high = np.array([5.0, 5.0, 5.0,
                     5.0, 5.0, 5.0],
                     dtype=np.float32)
@@ -47,20 +48,14 @@ class RotorsWrappers:
         self.reward_range = (-np.inf, np.inf)
         self.metadata = {"t_start": time.time(), "env_id": "rotors-rmf"}
 
-        self.received_state_action = False
-        self.obs = None
-        self.new_obs = None
-        self.reward = None
-        self.action = None
         self.done = False
-        self.collide = False
         self.timeout = False
-        self.info = None
-        self.state_action_msg = None
-        self.robot_odom = None
+        self.timeout_timer = None
+
+        self.robot_odom = collections.deque([]) 
         self.msg_cnt = 0
 
-        self.timeout_timer = None
+        self.sleep_rate = rospy.Rate(self.control_rate)
 
         self.seed()
 
@@ -69,8 +64,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius',
-                                                      1.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 1.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.2)
         self.robot_collision_frame = rospy.get_param(
@@ -84,7 +78,8 @@ class RotorsWrappers:
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
-        self.R_action = rospy.get_param('R_action', [0.0035, 0.0035, 0.05])
+        self.R_action = rospy.get_param('R_action', [0.0, 0.0, 0.0])
+        #self.R_action = rospy.get_param('R_action', [0.0035, 0.0035, 0.05])
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
@@ -95,11 +90,11 @@ class RotorsWrappers:
         self.obstacle_weight = rospy.get_param('obstacle_weight', 0.0)
         self.far_penalty = rospy.get_param('far_penalty', 100.0)
 
-        self.MAX_ACC_X = rospy.get_param('max_acc_x', 1.0)
-        self.MAX_ACC_Y = rospy.get_param('max_acc_y', 1.0)
-        self.MAX_ACC_Z = rospy.get_param('max_acc_z', 1.0)
+        self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
+        self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
+        self.max_acc_z = rospy.get_param('max_acc_z', 1.0)
 
-        self.max_z_train = rospy.get_param('max_z_train', 5.0)
+        self.control_rate = rospy.get_param('control_rate', 20.0)
 
     def step(self, action):
         command = RateThrust()
@@ -113,94 +108,67 @@ class RotorsWrappers:
         command.thrust.z = action[0][2]
         self.cmd_publisher.publish(command)
 
-        self.clear_state_action_flag()
-        while (not self.received_new_state_action()):
-            time.sleep(0.001)
-        return self.get_state_action()
+        # ros sleep 50ms
+        self.sleep_rate.sleep()
 
-    def odom_callback(self, msg):
-        self.robot_odom = msg.pose.pose
+        # get new obs
+        new_obs = self.get_new_obs()
+        # calculate reward
+        action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
+        Qx = self.Q_state.dot(new_obs)
+        xT_Qx = new_obs.transpose().dot(Qx)
+        Ru = self.R_action.dot(action)
+        uT_Ru = action.transpose().dot(Ru)
+        reward = -xT_Qx - uT_Ru
 
-    def state_action_callback(self, data):
-        self.msg_cnt = self.msg_cnt + 1
-        #if (self.msg_cnt >= 10): # throttle
-        if (self.msg_cnt >= 1):
-            self.msg_cnt = 0
-            self.state_action_msg = data
-            self.received_state_action = True
-        return
-
-    def clear_state_action_flag(self):
-        self.msg_cnt = 0
-        self.received_state_action = False
-
-    def received_new_state_action(self):
-        return self.received_state_action
-
-    def get_state_action(self):
-        data = self.state_action_msg
-
-        self.new_obs = np.array([data.next_goal_odom.pose.pose.position.x,
-        data.next_goal_odom.pose.pose.position.y,
-        data.next_goal_odom.pose.pose.position.z,
-        data.next_goal_odom.twist.twist.linear.x,
-        data.next_goal_odom.twist.twist.linear.y,
-        data.next_goal_odom.twist.twist.linear.z])
-        #print('new_obs:', self.new_obs)
-
-        # unnormalized actions
-        self.action = np.array([data.action.thrust.x, data.action.thrust.y, data.action.thrust.z])
-
-        self.obs = np.array([data.goal_odom.pose.pose.position.x,
-        data.goal_odom.pose.pose.position.y,
-        data.goal_odom.pose.pose.position.z,
-        data.goal_odom.twist.twist.linear.x,
-        data.goal_odom.twist.twist.linear.y,
-        data.goal_odom.twist.twist.linear.z])
-
-        Qx = self.Q_state.dot(self.new_obs)
-        xT_Qx = self.new_obs.transpose().dot(Qx)
-        Ru = self.R_action.dot(self.action)
-        #uT_Ru = self.action.transpose().dot(Ru)
-        uT_Ru = 0.0
-        self.reward = -xT_Qx - uT_Ru
-
-        self.info = {'status':'none'}
-        self.done = False
-
+        info = {'status':'none'}
+        self.done = False        
+        
         # reach goal?
-        if np.linalg.norm(self.new_obs[0:3]) < self.waypoint_radius:
-            self.reward = self.reward + self.goal_reward
+        if np.linalg.norm(new_obs[0:3]) < self.waypoint_radius:
+            reward = reward + self.goal_reward
             self.generate_new_goal()
-            self.info = {'status':'reach goal'}
-            print('reach goal!')
+            info = {'status':'reach goal'}
+            #print('reach goal!')
 
         # collide?
         if self.collide:
             self.collide = False
-            self.reward = self.reward - self.obstacle_max_penalty
+            reward = reward - self.obstacle_max_penalty
             self.done = True
-            self.info = {'status':'collide'}
-
-        # z increases too much?
-        # if self.robot_odom.position.z > self.max_z_train:
-        #     self.reward = self.reward - self.obstacle_max_penalty
-        #     self.done = True
-        #     self.info = {'status':'invalid_z'}
-        
-        # if np.linalg.norm(self.new_obs[0:3]) > 5 * self.goal_generation_radius:
-        #     self.done = True
-        #     self.info = {'status':'too_far'}
+            info = {'status':'collide'}        
 
         # time out?
         if self.timeout:
             self.timeout = False
             self.done = True
             print('timeout')
-            self.info = {'status':'timeout'}
+            info = {'status':'timeout'}
 
-        # fake multiple environments -> return np.array([[.]])
-        return (self.new_obs, self.reward, self.done, self.info)
+        return (new_obs, reward, self.done, info)
+
+    def get_new_obs(self):
+        if (len(self.robot_odom) > 0):
+            current_odom = self.robot_odom[0]
+            goad_in_vehicle_frame = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
+            new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
+            goad_in_vehicle_frame.pose.pose.position.y,
+            goad_in_vehicle_frame.pose.pose.position.z,
+            goad_in_vehicle_frame.twist.twist.linear.x,
+            goad_in_vehicle_frame.twist.twist.linear.y,
+            goad_in_vehicle_frame.twist.twist.linear.z])
+            
+            #print('goal in vehicle frame:', goad_in_vehicle_frame)
+            #print('obs in get_new_obs:', new_obs)
+        else:
+            new_obs = None
+        return new_obs
+
+    def odom_callback(self, msg):
+        #print("received odom msg")
+        self.robot_odom.appendleft(msg)
+        if (len(self.robot_odom) > 10): # save the last 10 odom msg
+            self.robot_odom.pop()
 
     def contact_callback(self, msg):
         # Check inside the models states for robot's contact state
@@ -218,6 +186,77 @@ class RotorsWrappers:
             else:
                 rospy.logdebug('Contact not found yet ...')
 
+    def transform_goal_to_world_frame(self, robot_odom, goal):
+        current_goal = Pose()
+        
+        r_goal = R.from_quat([goal.orientation.x, goal.orientation.y, goal.orientation.z, goal.orientation.w])
+        goal_euler_angles = r_goal.as_euler('zyx', degrees=True)
+        
+        robot_pose = robot_odom.pose.pose
+        r_robot = R.from_quat([robot_pose.orientation.x, robot_pose.orientation.y, robot_pose.orientation.z, robot_pose.orientation.w])
+        robot_euler_angles = r_robot.as_euler('zyx', degrees=True)
+
+        r_goal_in_world = R.from_euler('z', goal_euler_angles[0] + robot_euler_angles[0], degrees=True)
+        goal_pos_in_vehicle = np.array([goal.position.x, goal.position.y, goal.position.z])
+        robot_pos = np.array([robot_pose.position.x, robot_pose.position.y, robot_pose.position.z])
+        goal_pos_in_world = R.from_euler('z', robot_euler_angles[0], degrees=True).as_matrix().dot(goal_pos_in_vehicle) + robot_pos
+        # print('R abc:', R.from_euler('z', robot_euler_angles[0], degrees=True).as_matrix())
+        # print('goal_pos_in_vehicle:', goal_pos_in_vehicle)
+        # print('robot_pos:', robot_pos)
+        # print('goal_pos_in_world:', goal_pos_in_world)
+
+        current_goal.position.x = goal_pos_in_world[0]
+        current_goal.position.y = goal_pos_in_world[1]
+        current_goal.position.z = goal_pos_in_world[2]
+
+        current_goal_quat = r_goal_in_world.as_quat()
+        current_goal.orientation.x = current_goal_quat[0]
+        current_goal.orientation.y = current_goal_quat[1]
+        current_goal.orientation.z = current_goal_quat[2]
+        current_goal.orientation.w = current_goal_quat[3]
+
+        return current_goal
+
+    def transform_goal_to_vehicle_frame(self, robot_odom, goal):
+        goal_odom = Odometry()
+        
+        r_goal = R.from_quat([goal.orientation.x, goal.orientation.y, goal.orientation.z, goal.orientation.w])
+        goal_euler_angles = r_goal.as_euler('zyx', degrees=True)
+        
+        robot_pose = robot_odom.pose.pose
+        r_robot = R.from_quat([robot_pose.orientation.x, robot_pose.orientation.y, robot_pose.orientation.z, robot_pose.orientation.w])
+        robot_euler_angles = r_robot.as_euler('zyx', degrees=True)
+
+        r_goal_in_vechile = R.from_euler('z', goal_euler_angles[0] - robot_euler_angles[0], degrees=True)
+        goal_pos = np.array([goal.position.x, goal.position.y, goal.position.z])
+        robot_pos = np.array([robot_pose.position.x, robot_pose.position.y, robot_pose.position.z])
+        goal_pos_in_vehicle = R.from_euler('z', -robot_euler_angles[0], degrees=True).as_matrix().dot((goal_pos - robot_pos))
+        # print('goal_pos:', goal_pos)
+        # print('robot_pos:', robot_pos)
+        # print('R:', R.from_euler('z', -robot_euler_angles[0], degrees=True).as_matrix())
+
+        goal_odom.header.stamp = robot_odom.header.stamp
+        goal_odom.header.frame_id = "vehicle_frame"
+        goal_odom.pose.pose.position.x = goal_pos_in_vehicle[0]
+        goal_odom.pose.pose.position.y = goal_pos_in_vehicle[1]
+        goal_odom.pose.pose.position.z = goal_pos_in_vehicle[2]
+        goal_quat_in_vehicle = r_goal_in_vechile.as_quat()
+        goal_odom.pose.pose.orientation.x = goal_quat_in_vehicle[0]
+        goal_odom.pose.pose.orientation.y = goal_quat_in_vehicle[1]
+        goal_odom.pose.pose.orientation.z = goal_quat_in_vehicle[2]
+        goal_odom.pose.pose.orientation.w = goal_quat_in_vehicle[3]
+
+        goal_odom.twist.twist.linear.x = -robot_odom.twist.twist.linear.x
+        goal_odom.twist.twist.linear.y = -robot_odom.twist.twist.linear.y
+        goal_odom.twist.twist.linear.z = -robot_odom.twist.twist.linear.z
+        goal_odom.twist.twist.angular.x = -robot_odom.twist.twist.angular.x
+        goal_odom.twist.twist.angular.y = -robot_odom.twist.twist.angular.y
+        goal_odom.twist.twist.angular.z = -robot_odom.twist.twist.angular.z
+
+        self.goal_in_vehicle_publisher.publish(goal_odom)
+
+        return goal_odom
+
     def generate_new_goal(self):
         # Generate and return a pose in the sphere centered at the robot frame with radius as the goal_generation_radius
 
@@ -231,8 +270,8 @@ class RotorsWrappers:
         while np.isnan(phi):
             phi = np.arccos(2.0 * v - 1.0)
         r = self.goal_generation_radius * np.cbrt(random.random())
-        if r < 0.5:
-            r = 0.5
+        if r < 0.5 * self.goal_generation_radius:
+            r = 0.5 * self.goal_generation_radius
         sinTheta = np.sin(theta)
         cosTheta = np.cos(theta)
         sinPhi = np.sin(phi)
@@ -241,8 +280,9 @@ class RotorsWrappers:
         y = r * sinPhi * sinTheta
         z = r * cosPhi
 
-        if (z + self.robot_odom.position.z < 0.5):
-            z = 0.5 - self.robot_odom.position.z
+        robot_z = self.robot_odom[0].pose.pose.position.z
+        if (z + robot_z < 0.5):
+            z = 0.5 - robot_z
 
         rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
         goal.position.x = x
@@ -253,7 +293,7 @@ class RotorsWrappers:
         goal.orientation.z = 0
         goal.orientation.w = 1
         # Convert this goal into the world frame and set it as the current goal
-        # self.current_goal = self.transform_pose_to_world(goal)
+        self.current_goal = self.transform_goal_to_world_frame(self.robot_odom[0], goal)
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
@@ -277,10 +317,7 @@ class RotorsWrappers:
         marker.color.r = 1.0
         marker.color.g = 1.0
         marker.color.b = 0.0
-        marker.pose.orientation.w = 1.0
-        marker.pose.position.x = p.position.x
-        marker.pose.position.y = p.position.y
-        marker.pose.position.z = p.position.z
+        marker.pose = p
 
         # We add the new marker to the MarkerArray, removing the oldest
         # marker from it when necessary
@@ -299,20 +336,7 @@ class RotorsWrappers:
 
         count += 1
 
-    def stop_robot(self):
-        # make the robot stay at current position
-        goal = Pose()
-        goal.position.x = 0
-        goal.position.y = 0
-        goal.position.z = 0
-        goal.orientation.x = 0
-        goal.orientation.y = 0
-        goal.orientation.z = 0
-        goal.orientation.w = 1
-        self.goal_init_publisher.publish(goal)
-
     def timer_callback(self, event):
-        #print('timeout')
         self.timeout = True
 
     def set_goal_generation_radius(self, radius):
@@ -361,7 +385,8 @@ class RotorsWrappers:
         self.collide = False
         self.timeout = False
         self.done = False
-        self.received_state_action = False
+        #self.received_state_action = False
+        self.msg_cnt = 0
 
         if (self.timeout_timer != None):
             self.timeout_timer.shutdown()
@@ -369,10 +394,14 @@ class RotorsWrappers:
         rospy.loginfo('Unpausing physics')
         self.unpause_physics_proxy(EmptyRequest())
 
-        #return np.array([state_init[0], state_init[1], state_init[2], 0.0, 0.0, 0.0])
-        time.sleep(0.1) # wait for robot to get new odometry
-        obs, _, _, _ = self.get_state_action()
-        self.generate_new_goal() #???
+        self.robot_odom.clear()
+
+        rospy.sleep(0.1) # wait for robot to get new odometry
+        while (len(self.robot_odom) == 0):
+            rospy.sleep(0.001)
+            pass
+        self.generate_new_goal()
+        obs = self.get_new_obs()
         return obs        
 
     def reset_timer(self):
