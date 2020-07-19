@@ -41,8 +41,8 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        state_high = np.array([5.0, 5.0, 5.0,
-                    5.0, 5.0, 5.0],
+        state_high = np.array([10.0, 10.0, 10.0,
+                    10.0, 10.0, 10.0],
                     dtype=np.float32)
         self.observation_space = spaces.Box(low=-state_high, high=state_high, dtype=np.float32)
         self.reward_range = (-np.inf, np.inf)
@@ -64,7 +64,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 1.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.2)
         self.robot_collision_frame = rospy.get_param(
@@ -270,8 +270,8 @@ class RotorsWrappers:
         while np.isnan(phi):
             phi = np.arccos(2.0 * v - 1.0)
         r = self.goal_generation_radius * np.cbrt(random.random())
-        if r < 0.5 * self.goal_generation_radius:
-            r = 0.5 * self.goal_generation_radius
+        if r < self.waypoint_radius + 0.1:
+            r = self.waypoint_radius + 0.1
         sinTheta = np.sin(theta)
         cosTheta = np.cos(theta)
         sinPhi = np.sin(phi)
@@ -298,7 +298,7 @@ class RotorsWrappers:
 
         self.goal_training_publisher.publish(goal)
 
-        self.reset_timer()
+        self.reset_timer(r * 3)
 
         return
 
@@ -404,11 +404,14 @@ class RotorsWrappers:
         obs = self.get_new_obs()
         return obs        
 
-    def reset_timer(self):
+    def reset_timer(self, time):
         #rospy.loginfo('Resetting the timeout timer')
         if (self.timeout_timer != None):
             self.timeout_timer.shutdown()
-        self.timeout_timer = rospy.Timer(rospy.Duration(self.goal_generation_radius * 5), self.timer_callback)
+        # self.timeout_timer = rospy.Timer(rospy.Duration(self.goal_generation_radius * 5), self.timer_callback)
+        if time <= 0:
+            time = 1.0
+        self.timeout_timer = rospy.Timer(rospy.Duration(time), self.timer_callback)
 
     def render(self):
         return None

@@ -76,6 +76,9 @@ def train(args, extra_args):
 
     print('Training {} on {}:{} with arguments \n{}'.format(args.alg, env_type, env_id, alg_kwargs))
 
+    if args.save_path:
+        alg_kwargs['save_path'] = args.save_path
+
     model = learn(
         env=env,
         seed=seed,

@@ -14,6 +14,8 @@ from baselines import logger
 import tensorflow as tf
 import numpy as np
 
+from tensorboardX import SummaryWriter
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -44,6 +46,7 @@ def learn(network, env,
           eval_env=None,
           param_noise_adaption_interval=50,
           load_path=None,
+          save_path=None,
           **network_kwargs):
 
     set_global_seeds(seed)
@@ -103,6 +106,12 @@ def learn(network, env,
         ckpt.restore(manager.latest_checkpoint)
         print("Restoring from {}".format(manager.latest_checkpoint))
 
+    if save_path is not None:
+        print("Save models to folder ", save_path)
+        save_model = True
+    else:
+        save_model = False    
+
     eval_episode_rewards_history = deque(maxlen=100)
     episode_rewards_history = deque(maxlen=100)
 
@@ -124,8 +133,6 @@ def learn(network, env,
 
     epoch = 0
 
-
-
     start_time = time.time()
 
     epoch_episode_rewards = []
@@ -133,6 +140,10 @@ def learn(network, env,
     epoch_actions = []
     epoch_qs = []
     epoch_episodes = 0
+
+    writer = SummaryWriter(comment="-rmf")
+    best_return = np.finfo(np.float32).min
+
     for epoch in range(nb_epochs):
         for cycle in range(nb_epoch_cycles):
             # Perform rollouts.
@@ -281,6 +292,17 @@ def learn(network, env,
         # Total statistics.
         combined_stats['total/epochs'] = epoch + 1
         combined_stats['total/steps'] = t
+
+        writer.add_scalar("rollout/return", combined_stats['rollout/return'], combined_stats['total/epochs'])
+        writer.add_scalar("train/loss_actor", combined_stats['train/loss_actor'], combined_stats['total/epochs'])
+        writer.add_scalar("train/loss_critic", combined_stats['train/loss_critic'], combined_stats['total/epochs'])
+        if (save_model) and (combined_stats['total/epochs'] > 1) and (combined_stats['rollout/return'] > best_return):
+            save_path_tmp = osp.expanduser(save_path + "/epoch" + str(combined_stats['total/epochs']))
+            ckpt = tf.train.Checkpoint(model=agent)
+            manager = tf.train.CheckpointManager(ckpt, save_path_tmp, max_to_keep=None)
+            manager.save()
+            best_return = combined_stats['rollout/return']
+            print('save model in epoch:', epoch)
 
         for key in sorted(combined_stats.keys()):
             logger.record_tabular(key, combined_stats[key])
