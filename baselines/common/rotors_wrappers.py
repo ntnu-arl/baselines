@@ -129,7 +129,7 @@ class RotorsWrappers:
             reward = reward + self.goal_reward
             self.generate_new_goal()
             info = {'status':'reach goal'}
-            #print('reach goal!')
+            print('reach goal!')
 
         # collide?
         if self.collide:
