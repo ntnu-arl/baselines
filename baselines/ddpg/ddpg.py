@@ -34,14 +34,14 @@ def learn(network, env,
           normalize_returns=False,
           normalize_observations=True,
           critic_l2_reg=1e-2,
-          actor_lr=1e-4,
+          actor_lr=1e-3, 
           critic_lr=1e-3,
           popart=False,
           gamma=0.99,
           clip_norm=None,
           nb_train_steps=50, # per epoch cycle and MPI worker,
           nb_eval_steps=100,
-          batch_size=128, # per MPI worker
+          batch_size=32, # per MPI worker
           tau=0.001,
           eval_env=None,
           param_noise_adaption_interval=50,
@@ -65,7 +65,7 @@ def learn(network, env,
     nb_actions = env.action_space.shape[-1]
     assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
 
-    memory = Memory(limit=int(1e6), action_shape=env.action_space.shape, observation_shape=env.observation_space.shape)
+    memory = Memory(limit=int(100000), action_shape=env.action_space.shape, observation_shape=env.observation_space.shape)
     critic = Critic(nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_critic', **network_kwargs)
     actor = Actor(nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_actor', **network_kwargs)
 
@@ -92,7 +92,7 @@ def learn(network, env,
     logger.info('scaling actions by {} before executing in env'.format(max_action))
 
     agent = DDPG(actor, critic, memory, env.observation_space.shape, env.action_space.shape,
-        gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations,
+        gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations, observation_range=(-5., 5.),
         batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
         actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,
         reward_scale=reward_scale)
