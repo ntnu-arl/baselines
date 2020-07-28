@@ -19,6 +19,41 @@ PCL_FEATURE_SIZE = 1440
 
 class RotorsWrappers:
     def __init__(self):
+        rospy.init_node('rotors_wrapper', anonymous=True)
+
+        self.current_goal = None
+        self.get_params()
+
+        # Imitiate Gym variables
+        action_high = np.array([self.max_acc_x, self.max_acc_y, self.max_acc_z], dtype=np.float32)
+        self.action_space = spaces.Box(low=-action_high, high=action_high, dtype=np.float32)
+        #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
+        #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
+        #                dtype=np.float32)
+        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, np.pi/2, np.pi/2], dtype=np.float32)
+        pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        state_robot_low = -state_robot_high
+        pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+
+        state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
+        state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
+
+        self.observation_space = spaces.Box(low=state_low, high=state_high, dtype=np.float32)
+        self.reward_range = (-np.inf, np.inf)
+        self.metadata = {"t_start": time.time(), "env_id": "rotors-rmf"}
+
+        self.done = False
+        self.timeout = False
+        self.timeout_timer = None
+
+        self.robot_odom = collections.deque([]) 
+        self.msg_cnt = 0
+        self.pcl_feature = np.array([])
+
+        self.sleep_rate = rospy.Rate(self.control_rate)
+
+        self.seed()
+
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
@@ -34,40 +69,7 @@ class RotorsWrappers:
                                                  queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-        self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
-
-        self.current_goal = None
-        self.get_params()
-
-        # Imitiate Gym variables
-        action_high = np.array([self.max_acc_x, self.max_acc_y, self.max_acc_z], dtype=np.float32)
-        self.action_space = spaces.Box(low=-action_high, high=action_high, dtype=np.float32)
-        #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
-        #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
-        #                dtype=np.float32)
-        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, np.pi/2, np.pi/2], dtype=np.float32)
-        pcl_feature_high = 1000 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
-        state_robot_low = -state_robot_high
-        pcl_feature_low = -1000 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
-
-        state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
-        state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
-
-        self.observation_space = spaces.Box(low=state_low, high=state_high, dtype=np.float32)
-        self.reward_range = (-np.inf, np.inf)
-        self.metadata = {"t_start": time.time(), "env_id": "rotors-rmf"}
-
-        self.done = False
-        self.timeout = False
-        self.timeout_timer = None
-
-        self.robot_odom = collections.deque([]) 
-        self.msg_cnt = 0
-        self.pcl_feature = None
-
-        self.sleep_rate = rospy.Rate(self.control_rate)
-
-        self.seed()
+        self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)        
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -119,11 +121,11 @@ class RotorsWrappers:
         # get new obs
         new_obs = self.get_new_obs()
         # calculate reward
-        action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
-        Qx = self.Q_state.dot(new_obs)
-        xT_Qx = new_obs.transpose().dot(Qx)
-        Ru = self.R_action.dot(action)
-        uT_Ru = action.transpose().dot(Ru)
+        # action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
+        # Qx = self.Q_state.dot(new_obs[0:6])
+        # xT_Qx = new_obs[0:6].transpose().dot(Qx)
+        # Ru = self.R_action.dot(action)
+        # uT_Ru = action.transpose().dot(Ru)
         #reward = -xT_Qx - uT_Ru
         reward = -1.0
 
@@ -154,7 +156,7 @@ class RotorsWrappers:
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
-        if (len(self.robot_odom) > 0) and (self.pcl_feature != None):
+        if (len(self.robot_odom) > 0) and (len(self.pcl_feature) > 0):
             current_odom = self.robot_odom[0]
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
@@ -167,7 +169,7 @@ class RotorsWrappers:
             robot_euler_angles[1]]) # pitch [rad]
 
             new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
-            print('new_obs shape:', new_obs.shape)
+            #print('new_obs shape:', new_obs.shape)
             #print('goal in vehicle frame:', goad_in_vehicle_frame)
             #print('obs in get_new_obs:', new_obs)
         else:
@@ -181,13 +183,16 @@ class RotorsWrappers:
             self.robot_odom.pop()
 
     def pcl_feature_callback(self, msg):
-        if (msg.data.size == PCL_FEATURE_SIZE):
-            self.pcl_feature = msg.data
+        arr = list(msg.data)
+        arr = np.array(arr)
+        if (arr.size == PCL_FEATURE_SIZE):
+            self.pcl_feature = arr
 
     def contact_callback(self, msg):
         # Check inside the models states for robot's contact state
         for i in range(len(msg.states)):
             if (msg.states[i].collision1_name == self.robot_collision_frame):
+                print('Contact found!')
                 rospy.logdebug('Contact found!')
                 self.collide = True
                 if (msg.states[i].collision2_name ==
@@ -360,20 +365,20 @@ class RotorsWrappers:
         return self.goal_generation_radius
 
     def pause(self):
-        rospy.loginfo('Pausing physics')
+        #rospy.loginfo('Pausing physics')
         self.pause_physics_proxy(EmptyRequest())
 
     def unpause(self):
-        rospy.loginfo('Unpausing physics')
+        #rospy.loginfo('Unpausing physics')
         self.unpause_physics_proxy(EmptyRequest())
 
     def reset(self):
-        rospy.loginfo('Pausing physics')
+        #rospy.loginfo('Pausing physics')
         self.pause_physics_proxy(EmptyRequest())
 
         # randomize initial position (TODO: angle?, velocity?)
-        state_high = np.array([1.0, 1.0, 15.0], dtype=np.float32)
-        state_low = np.array([-1.0, -1.0, 10.0], dtype=np.float32)
+        state_high = np.array([1.0, 1.0, 3.0], dtype=np.float32)
+        state_low = np.array([-1.0, -1.0, 1.0], dtype=np.float32)
         state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
 
         # Fill in the new position of the robot
@@ -393,7 +398,7 @@ class RotorsWrappers:
         new_position.twist.angular.x = 0
         new_position.twist.angular.y = 0
         new_position.twist.angular.z = 0
-        rospy.loginfo('Placing robot')
+        #rospy.loginfo('Placing robot')
         self.model_state_publisher.publish(new_position)
 
         self.collide = False
@@ -405,14 +410,14 @@ class RotorsWrappers:
         if (self.timeout_timer != None):
             self.timeout_timer.shutdown()
 
-        rospy.loginfo('Unpausing physics')
+        #rospy.loginfo('Unpausing physics')
         self.unpause_physics_proxy(EmptyRequest())
 
         self.robot_odom.clear()
-        self.pcl_feature = None
+        self.pcl_feature = np.array([])
 
         rospy.sleep(0.1) # wait for robot to get new odometry
-        while (len(self.robot_odom) == 0) or (self.pcl_feature == None):
+        while (len(self.robot_odom) == 0) or (len(self.pcl_feature) == 0):
             rospy.sleep(0.001)
             pass
         self.generate_new_goal()

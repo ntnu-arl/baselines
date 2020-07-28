@@ -205,7 +205,7 @@ def configure_logger(log_path, **kwargs):
 
 def main(args):
     # ROS stuff
-    rospy.init_node('RL_node', anonymous=True, log_level=rospy.FATAL)
+    #rospy.init_node('RL_node', anonymous=True, log_level=rospy.FATAL)
 
     # configure logger, disable logging in child MPI processes (with rank > 0)
 
