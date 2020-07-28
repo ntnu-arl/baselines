@@ -107,10 +107,11 @@ def mlp_rmf_actor():
         h1 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                     name='mlp_fc1', activation='relu')(h)
         h2 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
-                                    name='mlp_fc2', activation='relu')(h1)                                    
-        h3 = tf.keras.layers.Dense(units=16, kernel_initializer=ortho_init(np.sqrt(2)),
-                                    name='mlp_fc3', activation='relu')(h2)                                    
-        network = tf.keras.Model(inputs=[x_input], outputs=[h3])
+                                    name='mlp_fc2', activation='relu')(h1)   
+        network = tf.keras.Model(inputs=[x_input], outputs=[h2])                                 
+        # h3 = tf.keras.layers.Dense(units=16, kernel_initializer=ortho_init(np.sqrt(2)),
+        #                             name='mlp_fc3', activation='relu')(h2)                                    
+        # network = tf.keras.Model(inputs=[x_input], outputs=[h3])
         return network
 
     return network_fn
@@ -119,18 +120,23 @@ def mlp_rmf_actor():
 def mlp_rmf_critic():
 
     def network_fn(input_shape):
-        print('mlp_rmf_critic input shape is {}'.format(input_shape))
+        print('mlp_rmf_critic input shape is {}'.format(input_shape))   
         x_input = tf.keras.Input(shape=input_shape)
         # h = tf.keras.layers.Flatten(x_input)
         h = x_input
-
-        h1 = tf.keras.layers.Dense(units=256, kernel_initializer=ortho_init(np.sqrt(2)),
+        h1 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                     name='mlp_fc1', activation='relu')(h)
-        h2 = tf.keras.layers.Dense(units=32, kernel_initializer=ortho_init(np.sqrt(2)),
-                                    name='mlp_fc2', activation='relu')(h1)                                    
-        h3 = tf.keras.layers.Dense(units=32, kernel_initializer=ortho_init(np.sqrt(2)),
-                                    name='mlp_fc3', activation='relu')(h2)  
+        h2 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
+                                    name='mlp_fc2', activation='relu')(h1)                                      
         network = tf.keras.Model(inputs=[x_input], outputs=[h2])
+
+        # h1 = tf.keras.layers.Dense(units=256, kernel_initializer=ortho_init(np.sqrt(2)),
+        #                             name='mlp_fc1', activation='relu')(h)
+        # h2 = tf.keras.layers.Dense(units=32, kernel_initializer=ortho_init(np.sqrt(2)),
+        #                             name='mlp_fc2', activation='relu')(h1)                                    
+        # h3 = tf.keras.layers.Dense(units=32, kernel_initializer=ortho_init(np.sqrt(2)),
+        #                             name='mlp_fc3', activation='relu')(h2)  
+        # network = tf.keras.Model(inputs=[x_input], outputs=[h3])
         return network
 
     return network_fn

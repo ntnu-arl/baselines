@@ -11,14 +11,18 @@ from gazebo_msgs.msg import ContactsState, ModelState
 from std_srvs.srv import Empty, EmptyRequest
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
+from std_msgs.msg import Float64MultiArray
 from gym import core, spaces
 from gym.utils import seeding
+
+PCL_FEATURE_SIZE = 1440
 
 class RotorsWrappers:
     def __init__(self):
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
+        self.pcl_feature_subscriber = rospy.Subscriber('/depth_feature', Float64MultiArray, self.pcl_feature_callback)
 
         self.goal_training_publisher = rospy.Publisher("/delta/goal_training", Pose)
         self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
@@ -41,8 +45,15 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        state_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
-        self.observation_space = spaces.Box(low=-state_high, high=state_high, dtype=np.float32)
+        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, np.pi/2, np.pi/2], dtype=np.float32)
+        pcl_feature_high = 1000 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        state_robot_low = -state_robot_high
+        pcl_feature_low = -1000 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+
+        state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
+        state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
+
+        self.observation_space = spaces.Box(low=state_low, high=state_high, dtype=np.float32)
         self.reward_range = (-np.inf, np.inf)
         self.metadata = {"t_start": time.time(), "env_id": "rotors-rmf"}
 
@@ -52,6 +63,7 @@ class RotorsWrappers:
 
         self.robot_odom = collections.deque([]) 
         self.msg_cnt = 0
+        self.pcl_feature = None
 
         self.sleep_rate = rospy.Rate(self.control_rate)
 
@@ -142,16 +154,20 @@ class RotorsWrappers:
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
-        if (len(self.robot_odom) > 0):
+        if (len(self.robot_odom) > 0) and (self.pcl_feature != None):
             current_odom = self.robot_odom[0]
-            goad_in_vehicle_frame = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
+            goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
             goad_in_vehicle_frame.pose.pose.position.y,
             goad_in_vehicle_frame.pose.pose.position.z,
             goad_in_vehicle_frame.twist.twist.linear.x,
             goad_in_vehicle_frame.twist.twist.linear.y,
-            goad_in_vehicle_frame.twist.twist.linear.z])
-            
+            goad_in_vehicle_frame.twist.twist.linear.z,
+            robot_euler_angles[2], # roll [rad]
+            robot_euler_angles[1]]) # pitch [rad]
+
+            new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
+            print('new_obs shape:', new_obs.shape)
             #print('goal in vehicle frame:', goad_in_vehicle_frame)
             #print('obs in get_new_obs:', new_obs)
         else:
@@ -163,6 +179,10 @@ class RotorsWrappers:
         self.robot_odom.appendleft(msg)
         if (len(self.robot_odom) > 10): # save the last 10 odom msg
             self.robot_odom.pop()
+
+    def pcl_feature_callback(self, msg):
+        if (msg.data.size == PCL_FEATURE_SIZE):
+            self.pcl_feature = msg.data
 
     def contact_callback(self, msg):
         # Check inside the models states for robot's contact state
@@ -184,17 +204,17 @@ class RotorsWrappers:
         current_goal = Pose()
         
         r_goal = R.from_quat([goal.orientation.x, goal.orientation.y, goal.orientation.z, goal.orientation.w])
-        goal_euler_angles = r_goal.as_euler('zyx', degrees=True)
+        goal_euler_angles = r_goal.as_euler('zyx', degrees=False)
         
         robot_pose = robot_odom.pose.pose
         r_robot = R.from_quat([robot_pose.orientation.x, robot_pose.orientation.y, robot_pose.orientation.z, robot_pose.orientation.w])
-        robot_euler_angles = r_robot.as_euler('zyx', degrees=True)
+        robot_euler_angles = r_robot.as_euler('zyx', degrees=False)
 
-        r_goal_in_world = R.from_euler('z', goal_euler_angles[0] + robot_euler_angles[0], degrees=True)
+        r_goal_in_world = R.from_euler('z', goal_euler_angles[0] + robot_euler_angles[0], degrees=False)
         goal_pos_in_vehicle = np.array([goal.position.x, goal.position.y, goal.position.z])
         robot_pos = np.array([robot_pose.position.x, robot_pose.position.y, robot_pose.position.z])
-        goal_pos_in_world = R.from_euler('z', robot_euler_angles[0], degrees=True).as_matrix().dot(goal_pos_in_vehicle) + robot_pos
-        # print('R abc:', R.from_euler('z', robot_euler_angles[0], degrees=True).as_matrix())
+        goal_pos_in_world = R.from_euler('z', robot_euler_angles[0], degrees=False).as_matrix().dot(goal_pos_in_vehicle) + robot_pos
+        # print('R abc:', R.from_euler('z', robot_euler_angles[0], degrees=False).as_matrix())
         # print('goal_pos_in_vehicle:', goal_pos_in_vehicle)
         # print('robot_pos:', robot_pos)
         # print('goal_pos_in_world:', goal_pos_in_world)
@@ -215,19 +235,19 @@ class RotorsWrappers:
         goal_odom = Odometry()
         
         r_goal = R.from_quat([goal.orientation.x, goal.orientation.y, goal.orientation.z, goal.orientation.w])
-        goal_euler_angles = r_goal.as_euler('zyx', degrees=True)
+        goal_euler_angles = r_goal.as_euler('zyx', degrees=False)
         
         robot_pose = robot_odom.pose.pose
         r_robot = R.from_quat([robot_pose.orientation.x, robot_pose.orientation.y, robot_pose.orientation.z, robot_pose.orientation.w])
-        robot_euler_angles = r_robot.as_euler('zyx', degrees=True)
+        robot_euler_angles = r_robot.as_euler('zyx', degrees=False)
 
-        r_goal_in_vechile = R.from_euler('z', goal_euler_angles[0] - robot_euler_angles[0], degrees=True)
+        r_goal_in_vechile = R.from_euler('z', goal_euler_angles[0] - robot_euler_angles[0], degrees=False)
         goal_pos = np.array([goal.position.x, goal.position.y, goal.position.z])
         robot_pos = np.array([robot_pose.position.x, robot_pose.position.y, robot_pose.position.z])
-        goal_pos_in_vehicle = R.from_euler('z', -robot_euler_angles[0], degrees=True).as_matrix().dot((goal_pos - robot_pos))
+        goal_pos_in_vehicle = R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix().dot((goal_pos - robot_pos))
         # print('goal_pos:', goal_pos)
         # print('robot_pos:', robot_pos)
-        # print('R:', R.from_euler('z', -robot_euler_angles[0], degrees=True).as_matrix())
+        # print('R:', R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix())
 
         goal_odom.header.stamp = robot_odom.header.stamp
         goal_odom.header.frame_id = "vehicle_frame"
@@ -249,7 +269,7 @@ class RotorsWrappers:
 
         self.goal_in_vehicle_publisher.publish(goal_odom)
 
-        return goal_odom
+        return goal_odom, robot_euler_angles
 
     def generate_new_goal(self):
         # Generate and return a pose in the sphere centered at the robot frame with radius as the goal_generation_radius
@@ -389,9 +409,10 @@ class RotorsWrappers:
         self.unpause_physics_proxy(EmptyRequest())
 
         self.robot_odom.clear()
+        self.pcl_feature = None
 
         rospy.sleep(0.1) # wait for robot to get new odometry
-        while (len(self.robot_odom) == 0):
+        while (len(self.robot_odom) == 0) or (self.pcl_feature == None):
             rospy.sleep(0.001)
             pass
         self.generate_new_goal()
