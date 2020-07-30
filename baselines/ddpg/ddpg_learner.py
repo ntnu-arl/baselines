@@ -87,8 +87,8 @@ class DDPG(tf.Module):
             self.ret_rms = None
 
         # Create target networks.
-        self.target_critic = Critic(actor.nb_actions, observation_shape, name='target_critic', network=critic.network, **critic.network_kwargs)
-        self.target_actor = Actor(actor.nb_actions, observation_shape, name='target_actor', network=actor.network, **actor.network_kwargs)
+        self.target_critic = Critic(actor.nb_actions, ob_robot_state_shape=8, ob_pcl_shape=(8,45,4), name='target_critic', network=critic.network, **critic.network_kwargs)
+        self.target_actor = Actor(actor.nb_actions, ob_robot_state_shape=8, ob_pcl_shape=(8,45,4), name='target_actor', network=actor.network, **actor.network_kwargs)
 
         # Set up parts.
         if self.param_noise is not None:
@@ -114,8 +114,9 @@ class DDPG(tf.Module):
         logger.info('  critic params: {}'.format(critic_nb_params))
         if self.critic_l2_reg > 0.:
             critic_reg_vars = []
-            for layer in self.critic.network_builder.layers[1:]:
-                critic_reg_vars.append(layer.kernel)
+            for layer in self.critic.critic_sub_net.layers[1:]:
+                if isinstance(layer, tf.keras.layers.Dense) or isinstance(layer, tf.keras.layers.Conv2D):
+                    critic_reg_vars.append(layer.kernel)
             for var in critic_reg_vars:
                 logger.info('  regularizing: {}'.format(var.name))
             logger.info('  applying l2 regularization with {}'.format(self.critic_l2_reg))
@@ -258,9 +259,10 @@ class DDPG(tf.Module):
             # The first is input layer, which is ignored here.
             if self.critic_l2_reg > 0.:
                 # Ignore the first input layer.
-                for layer in self.critic.network_builder.layers[1:]:
-                    # The original l2_regularizer takes half of sum square.
-                    critic_loss += (self.critic_l2_reg / 2.)* tf.reduce_sum(tf.square(layer.kernel))
+                for layer in self.critic.critic_sub_net.layers[1:]:
+                    if isinstance(layer, tf.keras.layers.Dense) or isinstance(layer, tf.keras.layers.Conv2D):
+                        # The original l2_regularizer takes half of sum square.
+                        critic_loss += (self.critic_l2_reg / 2.)* tf.reduce_sum(tf.square(layer.kernel))
         critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
         if self.clip_norm:
             critic_grads = [tf.clip_by_norm(grad, clip_norm=self.clip_norm) for grad in critic_grads]

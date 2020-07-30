@@ -141,6 +141,25 @@ def mlp_rmf_critic():
 
     return network_fn
 
+@register("pcl_encoder")
+def pcl_encoder():
+
+    def network_fn(input_shape):
+        print('pcl_encoder input shape is {}'.format(input_shape))   
+        inputs = tf.keras.Input(shape=input_shape[0] * input_shape[1] * input_shape[2])
+        x = tf.keras.layers.Reshape((input_shape[0], input_shape[1], input_shape[2]))(inputs)
+        x = tf.keras.layers.Conv2D(8, (3, 3), activation='relu', padding='same')(x)
+        x = tf.keras.layers.MaxPooling2D((2, 3), padding='same')(x)
+        x = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', padding='same')(x)
+        x = tf.keras.layers.MaxPooling2D((2, 3), padding='same')(x)        
+        # Generate the latent vector
+        latent = tf.keras.layers.Flatten()(x)
+        encoder = tf.keras.Model(inputs, latent, name='encoder')
+
+        return encoder
+
+    return network_fn    
+
 def get_network_builder(name):
     """
     If you want to register your own network outside models.py, you just need:

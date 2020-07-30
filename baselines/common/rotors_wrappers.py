@@ -167,9 +167,7 @@ class RotorsWrappers:
             goad_in_vehicle_frame.twist.twist.linear.z,
             robot_euler_angles[2], # roll [rad]
             robot_euler_angles[1]]) # pitch [rad]
-
             new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
-            #print('new_obs shape:', new_obs.shape)
             #print('goal in vehicle frame:', goad_in_vehicle_frame)
             #print('obs in get_new_obs:', new_obs)
         else:
@@ -388,20 +386,20 @@ class RotorsWrappers:
         # check if the start position collides with env
         start_pose, collide = self.spawn_robot(None)
         while collide:
-            rospy.loginfo('INVALID start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
+            #rospy.loginfo('INVALID start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
             start_pose, collide = self.spawn_robot(None)
 
-        rospy.loginfo('New start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
+        #rospy.loginfo('New start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
         
         # check if the end position collides with env: fix it, so stupid!
         goal, r = self.generate_new_goal(start_pose)
         _, collide = self.spawn_robot(goal)
         while collide:
-            rospy.loginfo('INVALID end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
+            #rospy.loginfo('INVALID end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
             goal, r = self.generate_new_goal(start_pose)
             _, collide = self.spawn_robot(goal)
         
-        rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
+        #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
 
         # put the robot at the start pose
         self.spawn_robot(start_pose)

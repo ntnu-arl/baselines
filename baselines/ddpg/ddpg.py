@@ -16,6 +16,8 @@ import numpy as np
 
 from tensorboardX import SummaryWriter
 
+import timeit
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -33,7 +35,7 @@ def learn(network, env,
           noise_type='adaptive-param_0.2',
           normalize_returns=False,
           normalize_observations=False,
-          critic_l2_reg=1e-2,
+          critic_l2_reg=1e-3,
           actor_lr=1e-3, 
           critic_lr=1e-3,
           popart=False,
@@ -80,8 +82,8 @@ def learn(network, env,
     assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
 
     memory = Memory(limit=int(100000), action_shape=env.action_space.shape, observation_shape=env.observation_space.shape)
-    critic = Critic(nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_critic', **network_kwargs)
-    actor = Actor(nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_actor', **network_kwargs)
+    critic = Critic(nb_actions, ob_robot_state_shape=8, ob_pcl_shape=(8,45,4), network='mlp_rmf_critic', **network_kwargs)
+    actor = Actor(nb_actions, ob_robot_state_shape=8, ob_pcl_shape=(8,45,4), network='mlp_rmf_actor', **network_kwargs)
 
     action_noise = None
     param_noise = None
@@ -170,7 +172,10 @@ def learn(network, env,
             print('epoch:', epoch, ', cycle:', cycle)
             for t_rollout in range(nb_rollout_steps):
                 # Predict next action.
+                #start = timeit.default_timer()
                 action, q, _, _ = agent.step(tf.constant(obs), apply_noise=True, compute_Q=True)
+                #stop = timeit.default_timer()
+                #print('Time for actor prediction: ', stop - start)
                 action, q = action.numpy(), q.numpy()
 
                 # Execute next action.
