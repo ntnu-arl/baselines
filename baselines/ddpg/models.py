@@ -14,19 +14,26 @@ class Model(tf.keras.Model):
 
 
 class Actor(Model):
-    def __init__(self, nb_actions, ob_shape, name='actor', network='mlp_rmf_actor', **network_kwargs):
+    def __init__(self, load_dagger_path, nb_actions, ob_shape, name='actor', network='mlp_rmf_actor', **network_kwargs):
         super().__init__(name=name, network=network, **network_kwargs)
         self.nb_actions = nb_actions
-        self.network_builder = get_network_builder(network)(**network_kwargs)(ob_shape)
-        self.output_layer = tf.keras.layers.Dense(units=self.nb_actions,
-                                                  activation=tf.keras.activations.tanh,
-                                                  kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3))
-        _ = self.output_layer(self.network_builder.outputs[0])
+        self.load_dagger_path = load_dagger_path
+        if load_dagger_path == None:
+            self.network_builder = get_network_builder(network)(**network_kwargs)(ob_shape)
+            self.output_layer = tf.keras.layers.Dense(units=self.nb_actions,
+                                                    activation=tf.keras.activations.tanh,
+                                                    kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3))
+            _ = self.output_layer(self.network_builder.outputs[0])
+        else:
+            print('Actor: Load dagger model ', load_dagger_path)
+            self.model = tf.keras.models.load_model(load_dagger_path)
 
     @tf.function
     def call(self, obs):
-        return self.output_layer(self.network_builder(obs))
-
+        if self.load_dagger_path == None:
+            return self.output_layer(self.network_builder(obs))
+        else:
+            return self.model(obs)
 
 class Critic(Model):
     def __init__(self, nb_actions, ob_shape, name='critic', network='mlp_rmf_critic', **network_kwargs):

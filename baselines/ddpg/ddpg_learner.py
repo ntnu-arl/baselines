@@ -44,7 +44,7 @@ def update_perturbed_actor(actor, perturbed_actor, param_noise_stddev):
 
 
 class DDPG(tf.Module):
-    def __init__(self, actor, critic, memory, observation_shape, action_shape, param_noise=None, action_noise=None,
+    def __init__(self, load_dagger_path, actor, critic, memory, observation_shape, action_shape, param_noise=None, action_noise=None,
         gamma=0.99, tau=0.001, normalize_returns=False, enable_popart=False, normalize_observations=True,
         batch_size=128, observation_range=(-5., 5.), action_range=(-1., 1.), return_range=(-np.inf, np.inf),
         critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1.):
@@ -88,7 +88,7 @@ class DDPG(tf.Module):
 
         # Create target networks.
         self.target_critic = Critic(actor.nb_actions, observation_shape, name='target_critic', network=critic.network, **critic.network_kwargs)
-        self.target_actor = Actor(actor.nb_actions, observation_shape, name='target_actor', network=actor.network, **actor.network_kwargs)
+        self.target_actor = Actor(load_dagger_path, actor.nb_actions, observation_shape, name='target_actor', network=actor.network, **actor.network_kwargs)
 
         # Set up parts.
         if self.param_noise is not None:

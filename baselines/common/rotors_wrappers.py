@@ -76,7 +76,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -121,13 +121,13 @@ class RotorsWrappers:
         # get new obs
         new_obs = self.get_new_obs()
         # calculate reward
-        # action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
-        # Qx = self.Q_state.dot(new_obs[0:6])
-        # xT_Qx = new_obs[0:6].transpose().dot(Qx)
-        # Ru = self.R_action.dot(action)
-        # uT_Ru = action.transpose().dot(Ru)
-        #reward = -xT_Qx - uT_Ru
-        reward = -1.0
+        action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
+        Qx = self.Q_state.dot(new_obs[0:6])
+        xT_Qx = new_obs[0:6].transpose().dot(Qx)
+        Ru = self.R_action.dot(action)
+        uT_Ru = action.transpose().dot(Ru)
+        reward = - uT_Ru
+        #reward = -1.0
 
         info = {'status':'none'}
         self.done = False        
@@ -138,6 +138,8 @@ class RotorsWrappers:
             self.done = True
             info = {'status':'reach goal'}
             print('reach goal!')
+        else:
+            reward = reward - xT_Qx    
 
         # collide?
         if self.collide:
