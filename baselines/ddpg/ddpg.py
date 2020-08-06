@@ -46,7 +46,8 @@ def learn(network, env,
           eval_env=None,
           param_noise_adaption_interval=50,
           load_path=None,
-          load_dagger_path=None,
+          load_actor_dagger_path=None,
+          load_critic_dagger_path=None,
           save_path=None,
           **network_kwargs):
 
@@ -67,8 +68,8 @@ def learn(network, env,
     assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
 
     memory = Memory(limit=int(100000), action_shape=env.action_space.shape, observation_shape=env.observation_space.shape)
-    critic = Critic(nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_critic', **network_kwargs)
-    actor = Actor(load_dagger_path, nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_actor', **network_kwargs)
+    critic = Critic(load_critic_dagger_path, nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_critic', **network_kwargs)
+    actor = Actor(load_actor_dagger_path, nb_actions, ob_shape=env.observation_space.shape, network='mlp_rmf_actor', **network_kwargs)
 
     action_noise = None
     param_noise = None
@@ -92,7 +93,7 @@ def learn(network, env,
     max_action = env.action_space.high
     logger.info('scaling actions by {} before executing in env'.format(max_action))
 
-    agent = DDPG(load_dagger_path, actor, critic, memory, env.observation_space.shape, env.action_space.shape,
+    agent = DDPG(load_actor_dagger_path, actor, load_critic_dagger_path, critic, memory, env.observation_space.shape, env.action_space.shape,
         gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations, observation_range=(-5., 5.),
         batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
         actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,

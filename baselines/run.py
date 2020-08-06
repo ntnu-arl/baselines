@@ -79,8 +79,11 @@ def train(args, extra_args):
     if args.save_path:
         alg_kwargs['save_path'] = args.save_path
 
-    if args.load_dagger_path:
-        alg_kwargs['load_dagger_path'] = args.load_dagger_path
+    if args.load_actor_dagger_path:
+        alg_kwargs['load_actor_dagger_path'] = args.load_actor_dagger_path
+
+    if args.load_critic_dagger_path:
+        alg_kwargs['load_critic_dagger_path'] = args.load_critic_dagger_path        
 
     model = learn(
         env=env,
