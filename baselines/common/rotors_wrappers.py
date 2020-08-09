@@ -93,9 +93,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 200.0)
+        self.goal_reward = rospy.get_param('goal_reward', 1.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 100.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -126,20 +126,21 @@ class RotorsWrappers:
         xT_Qx = new_obs[0:6].transpose().dot(Qx)
         Ru = self.R_action.dot(action)
         uT_Ru = action.transpose().dot(Ru)
-        reward = - uT_Ru
-        #reward = -1.0
+        #reward = - uT_Ru
+        reward = -0.01
 
         info = {'status':'none'}
         self.done = False        
         
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius):
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
             reward = reward + self.goal_reward
             self.done = True
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx    
+            #reward = reward - xT_Qx    
+            pass
 
         # collide?
         if self.collide:

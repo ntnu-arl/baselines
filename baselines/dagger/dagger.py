@@ -11,17 +11,18 @@ import tensorflow_docs.plots
 import tensorflow_docs.modeling
 from tensorboardX import SummaryWriter
 import timeit
+from baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise, OrnsteinUhlenbeckActionNoise
 
 batch_size = 32
-steps = 100
+steps = 2000
 nb_training_epoch = 50
-dagger_itr = 100
-critic_lr = 1e-3
-total_episodes = 100
+dagger_itr = 200
+itr_learn_critic = 5
+critic_lr = 1e-4
 gamma = 0.99 # Discount factor for future rewards
-tau = 0.005 # Used to update target networks
+tau = 0.001 # Used to update target networks
 buffer_capacity=50000
-batch_size=64
+stddev = 0.1
 
 import tensorflow as tf
 
@@ -42,6 +43,8 @@ class Buffer:
         self.action_buffer = np.zeros((self.buffer_capacity, nb_actions))
         self.reward_buffer = np.zeros((self.buffer_capacity, 1))
         self.next_state_buffer = np.zeros((self.buffer_capacity, nb_obs))
+
+        self.cnt = 0
 
     # Takes (s,a,r,s') obervation tuple as input
     def record(self, obs_tuple):
@@ -74,11 +77,19 @@ class Buffer:
         # See Pseudo Code.
         with tf.GradientTape() as tape:
             target_actions = actor(next_state_batch) # from dagger, no target actor
-            y = reward_batch + gamma * target_critic(tf.concat([next_state_batch, tf.cast(target_actions, dtype='float64')], axis=-1)) #([next_state_batch, target_actions])
-            critic_value = critic(tf.concat([state_batch, tf.cast(action_batch, dtype='float64')], axis=-1)) #([state_batch, action_batch])
+            y = reward_batch + gamma * target_critic(tf.concat([next_state_batch, tf.cast(target_actions, dtype='float64')], axis=-1))
+            critic_value = critic(tf.concat([state_batch, tf.cast(action_batch, dtype='float64')], axis=-1))
+            #y = reward_batch + gamma * target_critic([next_state_batch, tf.cast(target_actions, dtype='float64')])
+            #critic_value = critic([state_batch, tf.cast(action_batch, dtype='float64')])             
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
+            # self.cnt = self.cnt + 1
+            # if (self.cnt == 100):
+            #     self.cnt = 0
+            #     print('y:', y)
+            #     print('critic_value:', critic_value)
 
         critic_grad = tape.gradient(critic_loss, critic.trainable_variables)
+        
         critic_optimizer.apply_gradients(
             zip(critic_grad, critic.trainable_variables)
         )
@@ -105,7 +116,7 @@ def get_teacher_action(expert, obs, action_space):
     return action
 
 # build network
-def build_actor_model(input_shape, output_shape): # BatchNormalization??????????
+def build_actor_model(input_shape, output_shape):
     x_input = tf.keras.Input(shape=input_shape)
     h = x_input
     h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)), # too fancy initialization =))
@@ -142,6 +153,33 @@ def build_critic_model(input_shape):
     #               optimizer=optimizer,
     #               metrics=['mse'])
     return model    
+
+# def build_critic_model(input_shape):
+#     # State as input
+#     state_input = layers.Input(shape=(6))
+#     state_out = layers.Dense(16, activation="relu")(state_input)
+#     state_out = layers.BatchNormalization()(state_out)
+#     state_out = layers.Dense(32, activation="relu")(state_out)
+#     state_out = layers.BatchNormalization()(state_out)
+
+#     # Action as input
+#     action_input = layers.Input(shape=(3))
+#     action_out = layers.Dense(32, activation="relu")(action_input)
+#     action_out = layers.BatchNormalization()(action_out)
+
+#     # Both are passed through seperate layer before concatenating
+#     concat = layers.Concatenate()([state_out, action_out])
+
+#     out = layers.Dense(64, activation="relu")(concat)
+#     out = layers.BatchNormalization()(out)
+#     out = layers.Dense(64, ac0.6tivation="relu")(out)
+#     out = layers.BatchNormalization()(out)
+#     outputs = layers.Dense(1)(out)
+
+#     # Outputs single value for give state-action
+#     model = tf.keras.Model([state_input, action_input], outputs)
+
+#     return model
 
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
@@ -232,6 +270,8 @@ output_file = open('results.txt', 'w')
 early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
 writer = SummaryWriter(comment="-rmf_dagger")
 
+action_noise = NormalActionNoise(mu=np.zeros(nb_actions), sigma=float(stddev) * np.ones(nb_actions))
+
 # Aggregate and retrain actor network
 for itr in range(dagger_itr):
     obs_list = []
@@ -239,25 +279,36 @@ for itr in range(dagger_itr):
     obs = env.reset()
     reward_sum = 0.0
 
-    epoch_actor_losses = []
+    epoch_critic_losses = []
     for i in range(steps): #??????????????????
         #print('obs:', obs)
         #start = timeit.default_timer()
-        action = actor(np.reshape(obs, [1,nb_obs]), training=False) * env.action_space.high # assume symmetric action space (low = -high)
+        action = actor(np.reshape(obs, [1,nb_obs]), training=False)  # assume symmetric action space (low = -high)
         #stop = timeit.default_timer()
         #print('Time for actor prediction: ', stop - start)        
         #print('action:', action) # action = [[.]]
-        new_obs, reward, done, _ = env.step(action)
+
+        # add noise
+        if itr >= itr_learn_critic: # wait for critic to converge
+            noise = action_noise()
+            action += noise
+        
+        action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
+
+        new_obs, reward, done, _ = env.step(action * env.action_space.high)
         buffer.record((obs, action, reward, new_obs))
         obs = new_obs
 
         reward_sum += reward
-
+ 
         # train critic
-        if (buffer.buffer_counter >= buffer.batch_size):
-            actor_loss = buffer.learn()
-            update_target(tau)
-            epoch_actor_losses.append(actor_loss)
+        if (itr >= itr_learn_critic) and (i % 100 == 0):
+            if (buffer.buffer_counter >= buffer.batch_size):
+                env.pause()
+                critic_loss = buffer.learn()
+                update_target(tau)
+                epoch_critic_losses.append(critic_loss)
+                env.unpause()
 
         if done is True:
             obs = env.reset()
@@ -268,8 +319,8 @@ for itr in range(dagger_itr):
     env.pause()    
     print('Episode done ', 'itr ', itr, ',i ', i, 'reward sum ', reward_sum)
     output_file.write('Number of Steps: %02d\t Reward: %0.04f\n'%(i, reward_sum))
-    writer.add_scalar("rewward_sum", reward_sum, itr)
-    writer.add_scalar("actor_losses", np.mean(epoch_actor_losses), itr)
+    writer.add_scalar("reward_sum", reward_sum, itr)
+    writer.add_scalar("critic_losses", np.mean(epoch_critic_losses), itr)
 
     #if i==(steps-1):
     #    break
@@ -279,12 +330,13 @@ for itr in range(dagger_itr):
         actions_all = np.concatenate([actions_all, get_teacher_action(expert, obs, env.action_space)], axis=0)
 
     # train actor
-    actor.fit(obs_all, actions_all,
-                  batch_size=batch_size,
-                  epochs=nb_training_epoch,
-                  shuffle=True,
-                  validation_split=0.2, verbose=0,
-                  callbacks=[early_stop, tfdocs.modeling.EpochDots()])              
+    if itr < itr_learn_critic:
+        actor.fit(obs_all, actions_all,
+                    batch_size=batch_size,
+                    epochs=nb_training_epoch,
+                    shuffle=True,
+                    validation_split=0.2, verbose=0,
+                    callbacks=[early_stop, tfdocs.modeling.EpochDots()])              
 
 actor.save('dagger_actor_6state', include_optimizer=False) # should we include optimizer?
 actor.save_weights('weight_actor_6state.h5')
