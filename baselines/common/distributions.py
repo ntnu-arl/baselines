@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from baselines.a2c.utils import fc
+import sys
 
 class Pd(object):
     """
@@ -71,7 +72,8 @@ class DiagGaussianPdType(PdType):
     def __init__(self, latent_shape, size, init_scale=1.0, init_bias=0.0):
         self.size = size
         self.matching_fc = _matching_fc(latent_shape, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
-        self.logstd = tf.Variable(np.zeros((1, self.size)), name='pi/logstd', dtype=tf.float32)
+        #self.logstd = tf.Variable(np.zeros((1, self.size)), name='pi/logstd', dtype=tf.float32)
+        self.logstd = tf.Variable(-1*np.ones((1, self.size)), name='pi/logstd', dtype=tf.float32)
 
     def pdclass(self):
         return DiagGaussianPd

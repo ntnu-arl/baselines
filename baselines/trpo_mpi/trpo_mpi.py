@@ -14,6 +14,8 @@ from baselines.common.policies import PolicyWithValue
 from baselines.common.vec_env.vec_env import VecEnv
 from contextlib import contextmanager
 
+from tensorboardX import SummaryWriter
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -101,18 +103,19 @@ def learn(*,
         env,
         total_timesteps,
         timesteps_per_batch=1024, # what to train on
-        max_kl=0.001,
+        max_kl=0.005,
         cg_iters=10,
         gamma=0.99,
         lam=1.0, # advantage estimation
         seed=None,
         ent_coef=0.0,
         cg_damping=1e-2,
-        vf_stepsize=3e-4,
+        vf_stepsize=5e-4,
         vf_iters =3,
         max_episodes=0, max_iters=0,  # time constraint
         callback=None,
         load_path=None,
+        save_path=None,
         **network_kwargs
         ):
     '''
@@ -167,6 +170,8 @@ def learn(*,
         nworkers = 1
         rank = 0
 
+    writer = SummaryWriter(comment="trpo-rmf")
+
     set_global_seeds(seed)
 
     np.set_printoptions(precision=3)
@@ -197,6 +202,12 @@ def learn(*,
         ckpt = tf.train.Checkpoint(model=pi)
         manager = tf.train.CheckpointManager(ckpt, load_path, max_to_keep=None)
         ckpt.restore(manager.latest_checkpoint)
+
+    if save_path is not None:
+        print("Save models to folder ", save_path)
+        save_model = True
+    else:
+        save_model = False 
 
     vfadam = MpiAdam(vf_var_list)
 
@@ -326,6 +337,8 @@ def learn(*,
     assert sum([max_iters>0, total_timesteps>0, max_episodes>0]) < 2, \
         'out of max_iters, total_timesteps, and max_episodes only one should be specified'
 
+    best_return = np.finfo(np.float32).min
+
     while True:
         if callback: callback(locals(), globals())
         if total_timesteps and timesteps_so_far >= total_timesteps:
@@ -336,8 +349,10 @@ def learn(*,
             break
         logger.log("********** Iteration %i ************"%iters_so_far)
 
+        env.unpause()
         with timed("sampling"):
             seg = seg_gen.__next__()
+        env.pause()
         add_vtarg_and_adv(seg, gamma, lam)
 
         # ob, ac, atarg, ret, td1ret = map(np.concatenate, (obs, acs, atargs, rets, td1rets))
@@ -422,10 +437,14 @@ def learn(*,
         rewbuffer.extend(rews)
 
         logger.record_tabular("EpLenMean", np.mean(lenbuffer))
-        logger.record_tabular("EpRewMean", np.mean(rewbuffer))
+        return_mean = np.mean(rewbuffer)
+        logger.record_tabular("EpRewMean", return_mean)
         logger.record_tabular("EpThisIter", len(lens))
         episodes_so_far += len(lens)
         timesteps_so_far += sum(lens)
+
+        writer.add_scalar("rollout/return", return_mean, iters_so_far)
+
         iters_so_far += 1
 
         logger.record_tabular("EpisodesSoFar", episodes_so_far)
@@ -434,6 +453,14 @@ def learn(*,
 
         if rank==0:
             logger.dump_tabular()
+
+        if (save_model) and (iters_so_far > 1) and (return_mean > best_return):
+            save_path_tmp = osp.expanduser(save_path + "/itr" + str(iters_so_far))
+            ckpt = tf.train.Checkpoint(model=pi)
+            manager = tf.train.CheckpointManager(ckpt, save_path_tmp, max_to_keep=None)
+            manager.save()
+            best_return = return_mean
+            print('save model in itr:', iters_so_far)    
 
     return pi
 

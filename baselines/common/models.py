@@ -107,10 +107,8 @@ def mlp_rmf_actor():
         h1 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                     name='mlp_fc1', activation='relu')(h)
         h2 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
-                                    name='mlp_fc2', activation='relu')(h1)                                    
-        h3 = tf.keras.layers.Dense(units=16, kernel_initializer=ortho_init(np.sqrt(2)),
-                                    name='mlp_fc3', activation='relu')(h2)                                    
-        network = tf.keras.Model(inputs=[x_input], outputs=[h3])
+                                    name='mlp_fc2', activation='relu')(h1)                                                                        
+        network = tf.keras.Model(inputs=[x_input], outputs=[h2])
         return network
 
     return network_fn
