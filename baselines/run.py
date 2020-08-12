@@ -8,6 +8,7 @@ import multiprocessing
 import os.path as osp
 import gym
 from collections import defaultdict
+from collections import deque
 import tensorflow as tf
 import numpy as np
 
@@ -243,6 +244,8 @@ def main(args):
         state = model.initial_state if hasattr(model, 'initial_state') else None
 
         episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
+        episode_rew_queue = deque(maxlen=10)
+        queue_cnt = 0
         while True:
             if state is not None:
                 actions, _, state, _ = model.step(obs)
@@ -257,8 +260,9 @@ def main(args):
             done_any = done.any() if isinstance(done, np.ndarray) else done
             if done_any:
                 for i in np.nonzero(done)[0]:
-                    print('episode_rew={}'.format(episode_rew[i]))
+                    episode_rew_queue.appendleft(episode_rew[i])
                     episode_rew[i] = 0
+                    print('episode_rew mean={}'.format(np.mean(episode_rew_queue)))
                 obs = env.reset()    
                 obs = np.array([obs])
 

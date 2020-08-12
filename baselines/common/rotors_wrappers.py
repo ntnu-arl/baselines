@@ -123,11 +123,11 @@ class RotorsWrappers:
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
         Qx = self.Q_state.dot(new_obs[0:6])
-        xT_Qx = new_obs[0:6].transpose().dot(Qx)
+        xT_Qx = new_obs[0:6].transpose().dot(Qx) / 250.0
         Ru = self.R_action.dot(action)
-        uT_Ru = action.transpose().dot(Ru)
-        #reward = - uT_Ru
-        reward = -0.01
+        uT_Ru = action.transpose().dot(Ru) / 250.0
+        reward = - uT_Ru
+        #reward = -0.01
 
         info = {'status':'none'}
         self.done = False        
@@ -139,7 +139,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            #reward = reward - xT_Qx    
+            reward = reward - xT_Qx    
             pass
 
         # collide?
