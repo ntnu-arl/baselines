@@ -12,11 +12,12 @@ import tensorflow_docs.modeling
 from tensorboardX import SummaryWriter
 import timeit
 from baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise, OrnsteinUhlenbeckActionNoise
+from collections import deque
 
 batch_size = 32
 steps = 2000
 nb_training_epoch = 50
-dagger_itr = 200
+dagger_itr = 6 #200
 itr_learn_critic = 5
 critic_lr = 1e-4
 gamma = 0.99 # Discount factor for future rewards
@@ -120,11 +121,13 @@ def build_actor_model(input_shape, output_shape):
     x_input = tf.keras.Input(shape=input_shape)
     h = x_input
     h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)), # too fancy initialization =))
-                               name='mlp_fc1', activation='relu')(h)
+                               name='mlp_fc1', activation=tf.tanh)(h)
     h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
-                               name='mlp_fc2', activation='relu')(h)
+                               name='mlp_fc2', activation=tf.tanh)(h)
+    #h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
+    #                           name='output', activation=tf.keras.activations.tanh)(h)
     h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
-                               name='output', activation=tf.keras.activations.tanh)(h)
+                               name='output')(h)
 
     model = tf.keras.Model(inputs=[x_input], outputs=[h])
 
@@ -139,9 +142,9 @@ def build_critic_model(input_shape):
     x_input = tf.keras.Input(shape=input_shape)
     h = x_input
     h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
-                               name='mlp_fc1', activation='relu')(h)
+                               name='mlp_fc1', activation=tf.tanh)(h)
     h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
-                               name='mlp_fc2', activation='relu')(h)
+                               name='mlp_fc2', activation=tf.tanh)(h)
     h = tf.keras.layers.Dense(units=1, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
                                name='output')(h)
 
@@ -191,155 +194,160 @@ def update_target(tau):
 
     target_critic.set_weights(new_weights)
 
-# Limiting GPU memory growth: https://www.tensorflow.org/guide/gpu
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-    try:
-        # Currently, memory growth needs to be the same across GPUs
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-    except RuntimeError as e:
-        # Memory growth must be set before GPUs have been initialized
-        print(e)
+if __name__ == '__main__':
+    # Limiting GPU memory growth: https://www.tensorflow.org/guide/gpu
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
 
-#tf.keras.backend.set_floatx('float32')
+    #tf.keras.backend.set_floatx('float32')
 
-# Initialize
-env = RotorsWrappers()
-expert = PID([1.0, 1.0, 1.0], [2.0, 2.0, 2.0])
+    # Initialize
+    env = RotorsWrappers()
+    expert = PID([1.0, 1.0, 1.0], [2.0, 2.0, 2.0])
 
-nb_actions = env.action_space.shape[-1]
-nb_obs = env.observation_space.shape[-1]
+    nb_actions = env.action_space.shape[-1]
+    nb_obs = env.observation_space.shape[-1]
 
-# actor
-actor = build_actor_model(nb_obs, nb_actions)
-actor.summary()
+    # actor
+    actor = build_actor_model(nb_obs, nb_actions)
+    actor.summary()
 
-# critic
-critic = build_critic_model(nb_obs + nb_actions)
-critic.summary()
+    # critic
+    critic = build_critic_model(nb_obs + nb_actions)
+    critic.summary()
 
-target_critic = build_critic_model(nb_obs + nb_actions)
-target_critic.set_weights(critic.get_weights())
+    target_critic = build_critic_model(nb_obs + nb_actions)
+    target_critic.set_weights(critic.get_weights())
 
-critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
+    critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 
-# buffer
-buffer = Buffer(buffer_capacity, batch_size)
+    # buffer
+    buffer = Buffer(buffer_capacity, batch_size)
 
-obs_all = np.zeros((0, nb_obs))
-actions_all = np.zeros((0, nb_actions))
-rewards_all = np.zeros((0, ))
+    obs_all = np.zeros((0, nb_obs))
+    actions_all = np.zeros((0, nb_actions))
+    rewards_all = np.zeros((0, ))
 
-obs_list = []
-action_list = []
-reward_list = []
-
-# Collect data with expert in first iteration
-obs = env.reset()
-print('Collecting data...')
-for i in range(steps):
-    # if i == 0:
-    #     act = np.array([0.0])
-    # else:
-    #     act = get_teacher_action(ob)
-
-    action = get_teacher_action(expert, obs, env.action_space)
-    obs, reward, done, _ = env.step(action)
-    obs_list.append(obs)
-    action_list.append(action)
-    reward_list.append(np.array([reward]))
-
-    if done:
-        obs = env.reset()
-
-env.pause()
-
-print('Packing data into arrays...')
-for obs, act, rew in zip(obs_list, action_list, reward_list):
-    obs_all = np.concatenate([obs_all, np.reshape(obs, [1,nb_obs])], axis=0)
-    actions_all = np.concatenate([actions_all, act], axis=0)
-    rewards_all = np.concatenate([rewards_all, rew], axis=0)
-
-# First train for actor network
-actor.fit(obs_all, actions_all, batch_size=batch_size, epochs=nb_training_epoch, shuffle=True, verbose=0)
-output_file = open('results.txt', 'w')
-
-early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
-writer = SummaryWriter(comment="-rmf_dagger")
-
-action_noise = NormalActionNoise(mu=np.zeros(nb_actions), sigma=float(stddev) * np.ones(nb_actions))
-
-# Aggregate and retrain actor network
-for itr in range(dagger_itr):
     obs_list = []
+    action_list = []
+    reward_list = []
 
+    # Collect data with expert in first iteration
     obs = env.reset()
-    reward_sum = 0.0
+    print('Collecting data...')
+    for i in range(steps):
+        # if i == 0:
+        #     act = np.array([0.0])
+        # else:
+        #     act = get_teacher_action(ob)
 
-    epoch_critic_losses = []
-    for i in range(steps): #??????????????????
-        #print('obs:', obs)
-        #start = timeit.default_timer()
-        action = actor(np.reshape(obs, [1,nb_obs]), training=False)  # assume symmetric action space (low = -high)
-        #stop = timeit.default_timer()
-        #print('Time for actor prediction: ', stop - start)        
-        #print('action:', action) # action = [[.]]
+        action = get_teacher_action(expert, obs, env.action_space)
+        obs, reward, done, _ = env.step(action)
+        obs_list.append(obs)
+        action_list.append(action)
+        reward_list.append(np.array([reward]))
 
-        # add noise
-        if itr >= itr_learn_critic: # wait for critic to converge
-            noise = action_noise()
-            action += noise
-        
-        action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
-
-        new_obs, reward, done, _ = env.step(action * env.action_space.high)
-        buffer.record((obs, action, reward, new_obs))
-        obs = new_obs
-
-        reward_sum += reward
- 
-        # train critic
-        if (itr >= itr_learn_critic) and (i % 100 == 0):
-            if (buffer.buffer_counter >= buffer.batch_size):
-                env.pause()
-                critic_loss = buffer.learn()
-                update_target(tau)
-                epoch_critic_losses.append(critic_loss)
-                env.unpause()
-
-        if done is True:
+        if done:
             obs = env.reset()
-            continue
-        else:
-            obs_list.append(obs)
 
-    env.pause()    
-    print('Episode done ', 'itr ', itr, ',i ', i, 'reward sum ', reward_sum)
-    output_file.write('Number of Steps: %02d\t Reward: %0.04f\n'%(i, reward_sum))
-    writer.add_scalar("reward_sum", reward_sum, itr)
-    writer.add_scalar("critic_losses", np.mean(epoch_critic_losses), itr)
+    env.pause()
 
-    #if i==(steps-1):
-    #    break
-
-    for obs in obs_list:
+    print('Packing data into arrays...')
+    for obs, act, rew in zip(obs_list, action_list, reward_list):
         obs_all = np.concatenate([obs_all, np.reshape(obs, [1,nb_obs])], axis=0)
-        actions_all = np.concatenate([actions_all, get_teacher_action(expert, obs, env.action_space)], axis=0)
+        actions_all = np.concatenate([actions_all, act], axis=0)
+        rewards_all = np.concatenate([rewards_all, rew], axis=0)
 
-    # train actor
-    if itr < itr_learn_critic:
-        actor.fit(obs_all, actions_all,
-                    batch_size=batch_size,
-                    epochs=nb_training_epoch,
-                    shuffle=True,
-                    validation_split=0.2, verbose=0,
-                    callbacks=[early_stop, tfdocs.modeling.EpochDots()])              
+    # First train for actor network
+    actor.fit(obs_all, actions_all, batch_size=batch_size, epochs=nb_training_epoch, shuffle=True, verbose=0)
+    output_file = open('results.txt', 'w')
 
-actor.save('dagger_actor_6state', include_optimizer=False) # should we include optimizer?
-actor.save_weights('weight_actor_6state.h5')
+    early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
+    writer = SummaryWriter(comment="-rmf_dagger")
 
-critic.save('dagger_critic_6state', include_optimizer=False) # should we include optimizer?
-critic.save_weights('weight_critic_6state.h5')
+    action_noise = NormalActionNoise(mu=np.zeros(nb_actions), sigma=float(stddev) * np.ones(nb_actions))
+
+    episode_rew_queue = deque(maxlen=10)
+
+    # Aggregate and retrain actor network
+    for itr in range(dagger_itr):
+        obs_list = []
+
+        obs = env.reset()
+        reward_sum = 0.0
+
+        epoch_critic_losses = []
+        for i in range(steps): #??????????????????
+            #print('obs:', obs)
+            #start = timeit.default_timer()
+            action = actor(np.reshape(obs, [1,nb_obs]), training=False)  # assume symmetric action space (low = -high)
+            #stop = timeit.default_timer()
+            #print('Time for actor prediction: ', stop - start)        
+            #print('action:', action) # action = [[.]]
+
+            # add noise
+            if itr >= itr_learn_critic: # wait for critic to converge
+                noise = action_noise()
+                action += noise
+            
+            action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
+
+            new_obs, reward, done, _ = env.step(action * env.action_space.high)
+            buffer.record((obs, action, reward, new_obs))
+            obs = new_obs
+
+            reward_sum += reward
+    
+            # train critic
+            if (itr >= itr_learn_critic) and (i % 100 == 0):
+                if (buffer.buffer_counter >= buffer.batch_size):
+                    env.pause()
+                    critic_loss = buffer.learn()
+                    update_target(tau)
+                    epoch_critic_losses.append(critic_loss)
+                    env.unpause()
+
+            if done is True:
+                episode_rew_queue.appendleft(reward_sum)
+                reward_sum = 0
+                obs = env.reset()
+                continue
+            else:
+                obs_list.append(obs)
+
+        env.pause()    
+        mean_return = np.mean(episode_rew_queue)
+        print('Episode done ', 'itr ', itr, ',i ', i, 'mean return', mean_return)
+        writer.add_scalar("mean return", mean_return, itr)
+        writer.add_scalar("critic_losses", np.mean(epoch_critic_losses), itr)
+
+        #if i==(steps-1):
+        #    break
+
+        for obs in obs_list:
+            obs_all = np.concatenate([obs_all, np.reshape(obs, [1,nb_obs])], axis=0)
+            actions_all = np.concatenate([actions_all, get_teacher_action(expert, obs, env.action_space)], axis=0)
+
+        # train actor
+        if itr < itr_learn_critic:
+            actor.fit(obs_all, actions_all,
+                        batch_size=batch_size,
+                        epochs=nb_training_epoch,
+                        shuffle=True,
+                        validation_split=0.2, verbose=0,
+                        callbacks=[early_stop, tfdocs.modeling.EpochDots()])              
+
+    actor.save('dagger_actor_6state_tanh_no_limit', include_optimizer=False) # should we include optimizer?
+    actor.save_weights('weight_actor_6state_tanh_no_limit.h5')
+
+    critic.save('dagger_critic_6state_tanh_no_limit', include_optimizer=False) # should we include optimizer?
+    critic.save_weights('weight_critic_6state_tanh_no_limit.h5')
