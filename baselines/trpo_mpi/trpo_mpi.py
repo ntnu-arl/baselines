@@ -12,6 +12,7 @@ from baselines.common.mpi_adam import MpiAdam
 from baselines.common.cg import cg
 from baselines.common.policies import PolicyWithValue
 from baselines.common.vec_env.vec_env import VecEnv
+from baselines.dagger.dagger import build_backbone
 from contextlib import contextmanager
 
 from tensorboardX import SummaryWriter
@@ -180,16 +181,16 @@ def learn(*,
     ob_space = env.observation_space
     ac_space = env.action_space
 
-    if isinstance(network, str):
-        network = get_network_builder(network)(**network_kwargs)
+    # if isinstance(network, str):
+    #     network = get_network_builder(network)(**network_kwargs)
 
     with tf.name_scope("pi"):
-        pi_policy_network = network(ob_space.shape)
-        pi_value_network = network(ob_space.shape)
+        pi_policy_network = build_backbone(env.ob_robot_state_shape, env.ob_pcl_shape)
+        pi_value_network = build_backbone(env.ob_robot_state_shape, env.ob_pcl_shape)
         pi = PolicyWithValue(ac_space, pi_policy_network, pi_value_network)
     with tf.name_scope("oldpi"):
-        old_pi_policy_network = network(ob_space.shape)
-        old_pi_value_network = network(ob_space.shape)
+        old_pi_policy_network = build_backbone(env.ob_robot_state_shape, env.ob_pcl_shape)
+        old_pi_value_network = build_backbone(env.ob_robot_state_shape, env.ob_pcl_shape)
         oldpi = PolicyWithValue(ac_space, old_pi_policy_network, old_pi_value_network)
 
     pi_var_list = pi_policy_network.trainable_variables + list(pi.pdtype.trainable_variables)

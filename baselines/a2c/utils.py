@@ -24,10 +24,10 @@ def conv(scope, *, nf, rf, stride, activation, pad='valid', init_scale=1.0, data
                                        data_format=data_format, kernel_initializer=ortho_init(init_scale))
     return layer
 
-def fc(input_shape, scope, nh, *, init_scale=1.0, init_bias=0.0):
+def fc(input_shape, scope, nh, *, init_scale=1.0, init_bias=0.0, activation=None):
     with tf.name_scope(scope):
         layer = tf.keras.layers.Dense(units=nh, kernel_initializer=ortho_init(init_scale),
-                                      bias_initializer=tf.keras.initializers.Constant(init_bias))
+                                      bias_initializer=tf.keras.initializers.Constant(init_bias), activation=activation)
         layer.build(input_shape)
     return layer
 

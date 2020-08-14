@@ -27,23 +27,23 @@ class PolicyWithValue(tf.Module):
 
         self.policy_network = policy_network # not including final layer
 
-        # MODIFY: load weights from dagger actor
-        print('PolicyWithValue: trpo actor model')
-        self.policy_network.summary()
-        print('PolicyWithValue: dagger actor model')
-        self.dagger_model = build_actor_model(6, 3)
-        self.dagger_model.summary()
-        self.dagger_model.load_weights(DAGGER_ACTOR_WEIGHT)
-        self.policy_network.get_layer('mlp_fc0').set_weights(self.dagger_model.get_layer('mlp_fc1').get_weights())
-        self.policy_network.get_layer('mlp_fc1').set_weights(self.dagger_model.get_layer('mlp_fc2').get_weights())
+        # # MODIFY: load weights from dagger actor
+        # print('PolicyWithValue: trpo actor model')
+        # self.policy_network.summary()
+        # print('PolicyWithValue: dagger actor model')
+        # self.dagger_model = build_actor_model(6, 3)
+        # self.dagger_model.summary()
+        # self.dagger_model.load_weights(DAGGER_ACTOR_WEIGHT)
+        # self.policy_network.get_layer('mlp_fc0').set_weights(self.dagger_model.get_layer('mlp_fc1').get_weights())
+        # self.policy_network.get_layer('mlp_fc1').set_weights(self.dagger_model.get_layer('mlp_fc2').get_weights())
 
         self.value_network = value_network or policy_network # not including final layer
         self.estimate_q = estimate_q
         self.initial_state = None
 
         # Based on the action space, will select what probability distribution type
-        self.pdtype = make_pdtype(policy_network.output_shape, ac_space, init_scale=0.01)
-        self.pdtype.matching_fc.set_weights(self.dagger_model.get_layer('output').get_weights())
+        self.pdtype = make_pdtype(policy_network.output_shape, ac_space, init_scale=0.01, activation=tf.keras.activations.tanh)
+        # self.pdtype.matching_fc.set_weights(self.dagger_model.get_layer('output').get_weights())
 
         if estimate_q:
             assert isinstance(ac_space, gym.spaces.Discrete)
