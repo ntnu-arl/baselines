@@ -81,9 +81,9 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.3)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -100,7 +100,7 @@ class RotorsWrappers:
         self.R_action = np.array(list(self.R_action))
         self.goal_reward = rospy.get_param('goal_reward', 1.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0)
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -112,7 +112,7 @@ class RotorsWrappers:
 
         self.min_wp_x = rospy.get_param('min_waypoint_x', -10.0)
         self.min_wp_y = rospy.get_param('min_waypoint_y', -10.0)
-        self.min_wp_z = rospy.get_param('min_waypoint_z', 1.0)                
+        self.min_wp_z = rospy.get_param('min_waypoint_z', 2.0)                
 
         self.min_init_z = rospy.get_param('min_initial_z', 2.0)
         self.max_init_z = rospy.get_param('max_initial_z', 4.0)
@@ -142,8 +142,8 @@ class RotorsWrappers:
         xT_Qx = new_obs[0:6].transpose().dot(Qx) / 250.0
         Ru = self.R_action.dot(action)
         uT_Ru = action.transpose().dot(Ru) / 250.0
-        reward = - uT_Ru
-        #reward = -0.01
+        #reward = - uT_Ru
+        reward = -0.01
 
         info = {'status':'none'}
         self.done = False        
@@ -155,7 +155,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx    
+            #reward = reward - xT_Qx    
             pass
 
         # collide?
@@ -173,6 +173,12 @@ class RotorsWrappers:
             info = {'status':'timeout'}
 
         return (new_obs, reward, self.done, info)
+
+    def get_augmented_obs(self):
+        current_pos = self.robot_odom[0].pose.pose.position
+        current_vel = self.robot_odom[0].twist.twist.linear
+        return np.array([current_pos.x, current_pos.y, current_pos.z, current_vel.x, current_vel.y, current_vel.z,
+                    self.current_goal.position.x, self.current_goal.position.y, self.current_goal.position.z])
 
     def get_new_obs(self):
         if (len(self.robot_odom) > 0) and (len(self.pcl_feature) > 0):
@@ -313,9 +319,10 @@ class RotorsWrappers:
         phi = np.arccos(2.0 * v - 1.0)
         while np.isnan(phi):
             phi = np.arccos(2.0 * v - 1.0)
-        r = self.goal_generation_radius * np.cbrt(random.random())
-        if r < 3.0:
-            r = 3.0
+        r = self.goal_generation_radius
+        # r = self.goal_generation_radius * np.cbrt(random.random())
+        # if r < 3.0:
+        #     r = 3.0
         sinTheta = np.sin(theta)
         cosTheta = np.cos(theta)
         sinPhi = np.sin(phi)
@@ -325,8 +332,8 @@ class RotorsWrappers:
         z = r * cosPhi
 
         # limit z of goal
-        [x, y, z] = np.clip([x,y,z], [self.min_wp_x - goal.position.x, self.min_wp_y - goal.position.y, self.min_wp_z - goal.position.z],
-                                    [self.max_wp_x - goal.position.x, self.max_wp_y - goal.position.y, self.max_wp_z - goal.position.z])
+        [x, y, z] = np.clip([x,y,z], [self.min_wp_x - robot_pose.position.x, self.min_wp_y - robot_pose.position.y, self.min_wp_z - robot_pose.position.z],
+                                    [self.max_wp_x - robot_pose.position.x, self.max_wp_y - robot_pose.position.y, self.max_wp_z - robot_pose.position.z])
 
 
         # rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
