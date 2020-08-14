@@ -15,7 +15,9 @@ from std_msgs.msg import Float64MultiArray
 from gym import core, spaces
 from gym.utils import seeding
 
-PCL_FEATURE_SIZE = 1440
+OB_ROBOT_STATE_SHAPE = 8
+OB_PCL_SHAPE = (8, 45, 4)
+PCL_FEATURE_SIZE = OB_PCL_SHAPE[0] * OB_PCL_SHAPE[1] * OB_PCL_SHAPE[2]
 
 class RotorsWrappers:
     def __init__(self):
@@ -30,15 +32,18 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
-        #pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, np.pi/2, np.pi/2], dtype=np.float32)
+        pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         state_robot_low = -state_robot_high
-        #pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
 
-        #state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
-        #state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
+        state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
+        state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
 
-        self.observation_space = spaces.Box(low=state_robot_low, high=state_robot_high, dtype=np.float32)
+        self.observation_space = spaces.Box(low=state_low, high=state_high, dtype=np.float32)
+        self.ob_pcl_shape = OB_PCL_SHAPE
+        self.ob_robot_state_shape = OB_ROBOT_STATE_SHAPE
+        self.pcl_feature_size = PCL_FEATURE_SIZE
         self.reward_range = (-np.inf, np.inf)
         self.metadata = {"t_start": time.time(), "env_id": "rotors-rmf"}
 
@@ -76,7 +81,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -100,6 +105,17 @@ class RotorsWrappers:
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
         self.max_acc_z = rospy.get_param('max_acc_z', 1.0)
+
+        self.max_wp_x = rospy.get_param('max_waypoint_x', 10.0)
+        self.max_wp_y = rospy.get_param('max_waypoint_y', 10.0)
+        self.max_wp_z = rospy.get_param('max_waypoint_z', 6.0) 
+
+        self.min_wp_x = rospy.get_param('min_waypoint_x', -10.0)
+        self.min_wp_y = rospy.get_param('min_waypoint_y', -10.0)
+        self.min_wp_z = rospy.get_param('min_waypoint_z', 1.0)                
+
+        self.min_init_z = rospy.get_param('min_initial_z', 2.0)
+        self.max_init_z = rospy.get_param('max_initial_z', 4.0)
 
         self.control_rate = rospy.get_param('control_rate', 20.0)
 
@@ -159,7 +175,7 @@ class RotorsWrappers:
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
-        if (len(self.robot_odom) > 0):
+        if (len(self.robot_odom) > 0) and (len(self.pcl_feature) > 0):
             current_odom = self.robot_odom[0]
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
@@ -167,10 +183,10 @@ class RotorsWrappers:
             goad_in_vehicle_frame.pose.pose.position.z,
             goad_in_vehicle_frame.twist.twist.linear.x,
             goad_in_vehicle_frame.twist.twist.linear.y,
-            goad_in_vehicle_frame.twist.twist.linear.z])
-            #robot_euler_angles[2], # roll [rad]
-            #robot_euler_angles[1]]) # pitch [rad]
-            #new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
+            goad_in_vehicle_frame.twist.twist.linear.z,
+            robot_euler_angles[2], # roll [rad]
+            robot_euler_angles[1]]) # pitch [rad]
+            new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
         else:
             new_obs = None
         return new_obs
@@ -191,7 +207,7 @@ class RotorsWrappers:
         # Check inside the models states for robot's contact state
         for i in range(len(msg.states)):
             if (msg.states[i].collision1_name == self.robot_collision_frame):
-                #print('Contact found!')
+                print('Contact found!')
                 rospy.logdebug('Contact found!')
                 self.collide = True
                 if (msg.states[i].collision2_name ==
@@ -298,8 +314,8 @@ class RotorsWrappers:
         while np.isnan(phi):
             phi = np.arccos(2.0 * v - 1.0)
         r = self.goal_generation_radius * np.cbrt(random.random())
-        if r < self.waypoint_radius + 0.5:
-            r = self.waypoint_radius + 0.5
+        if r < 3.0:
+            r = 3.0
         sinTheta = np.sin(theta)
         cosTheta = np.cos(theta)
         sinPhi = np.sin(phi)
@@ -309,11 +325,9 @@ class RotorsWrappers:
         z = r * cosPhi
 
         # limit z of goal
-        # robot_z = robot_pose.position.z
-        # if (z + robot_z > 2.5):
-        #     z = 2.5 - robot_z
-        # elif (z + robot_z < 0.5):
-        #     z = 0.5 - robot_z
+        [x, y, z] = np.clip([x,y,z], [self.min_wp_x - goal.position.x, self.min_wp_y - goal.position.y, self.min_wp_z - goal.position.z],
+                                    [self.max_wp_x - goal.position.x, self.max_wp_y - goal.position.y, self.max_wp_z - goal.position.z])
+
 
         # rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
         goal.position.x = x
@@ -427,8 +441,8 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([0.0, 0.0, 10.0], dtype=np.float32)
-            state_low = np.array([0.0, 0.0, 8.0], dtype=np.float32)
+            state_high = np.array([self.max_wp_x, self.max_wp_y, self.max_init_z], dtype=np.float32)
+            state_low = np.array([self.min_wp_x, self.min_wp_y, self.min_init_z], dtype=np.float32)
             state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = state_init[0]
             new_position.pose.position.y = state_init[1]
@@ -465,7 +479,7 @@ class RotorsWrappers:
         self.collide = False
 
         rospy.sleep(0.1) # wait for robot to get new odometry
-        while (len(self.robot_odom) == 0):
+        while (len(self.robot_odom) == 0) or (len(self.pcl_feature) == 0):
             rospy.sleep(0.001)
             pass        
         return new_position.pose, self.collide

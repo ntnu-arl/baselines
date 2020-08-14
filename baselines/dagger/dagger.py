@@ -17,7 +17,7 @@ from collections import deque
 batch_size = 32
 steps = 2000
 nb_training_epoch = 50
-dagger_itr = 6 #200
+dagger_itr = 20 #200
 itr_learn_critic = 5
 critic_lr = 1e-4
 gamma = 0.99 # Discount factor for future rewards
@@ -116,23 +116,44 @@ def get_teacher_action(expert, obs, action_space):
     action = np.array([action])
     return action
 
+def pcl_encoder(input_shape):
+    print('pcl_encoder input shape is {}'.format(input_shape))
+    inputs = tf.keras.Input(shape=input_shape[0] * input_shape[1] * input_shape[2])
+    x = tf.keras.layers.Reshape((input_shape[0], input_shape[1], input_shape[2]))(inputs)
+    x = tf.keras.layers.Conv2D(8, (3, 3), activation='relu', padding='same', name='conv1')(x)
+    x = tf.keras.layers.MaxPooling2D((2, 3), padding='same', name='pool1')(x)
+    x = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', padding='same', name='conv2')(x)
+    x = tf.keras.layers.MaxPooling2D((2, 3), padding='same', name='pool2')(x)
+    # Generate the latent vector
+    latent = tf.keras.layers.Flatten()(x)
+    encoder = tf.keras.Model(inputs, latent, name='encoder')
+    encoder.summary()
+    return encoder
+
 # build network
-def build_actor_model(input_shape, output_shape):
-    x_input = tf.keras.Input(shape=input_shape)
-    h = x_input
-    h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)), # too fancy initialization =))
-                               name='mlp_fc1', activation=tf.tanh)(h)
-    h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
-                               name='mlp_fc2', activation=tf.tanh)(h)
-    #h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
-    #                           name='output', activation=tf.keras.activations.tanh)(h)
-    h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
-                               name='output')(h)
+def build_backbone(ob_robot_state_shape, ob_pcl_shape):
+    # input layer
+    robot_state_input = tf.keras.Input(shape=ob_robot_state_shape)
+    # CNN layers for pcl
+    pcl_encoder_submodel = pcl_encoder(input_shape=ob_pcl_shape)
+    x = tf.keras.layers.concatenate([robot_state_input, pcl_encoder_submodel.outputs[0]])
+    # FC layers
+    h1 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
+                                name='fc1', activation='relu')(x)
+    h2 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
+                                name='fc2', activation='relu')(h1)
+    backbone_model = tf.keras.Model(inputs=[robot_state_input, pcl_encoder_submodel.inputs[0]], outputs=[h2], name='backbone_net') 
+    return backbone_model                               
 
-    model = tf.keras.Model(inputs=[x_input], outputs=[h])
-
+def build_actor_model(ob_robot_state_shape, ob_pcl_shape, nb_actions):
+    backbone = build_backbone(ob_robot_state_shape, ob_pcl_shape)
+    # output layer
+    output_layer = tf.keras.layers.Dense(units=nb_actions,
+                                        name='output',
+                                        activation=tf.keras.activations.tanh,
+                                        kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3))(backbone.outputs[0])
+    model = tf.keras.Model(inputs=[backbone.inputs], outputs=[output_layer], name='actor_net')
     optimizer = tf.keras.optimizers.Adam(lr=1e-4)
-
     model.compile(loss='mse',
                   optimizer=optimizer,
                   metrics=['mse'])
@@ -142,9 +163,9 @@ def build_critic_model(input_shape):
     x_input = tf.keras.Input(shape=input_shape)
     h = x_input
     h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
-                               name='mlp_fc1', activation=tf.tanh)(h)
+                               name='mlp_fc1', activation=tf.keras.activations.tanh)(h)
     h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
-                               name='mlp_fc2', activation=tf.tanh)(h)
+                               name='mlp_fc2', activation=tf.keras.activations.tanh)(h)
     h = tf.keras.layers.Dense(units=1, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
                                name='output')(h)
 
@@ -218,22 +239,15 @@ if __name__ == '__main__':
     nb_obs = env.observation_space.shape[-1]
 
     # actor
-    actor = build_actor_model(nb_obs, nb_actions)
+    actor = build_actor_model(ob_robot_state_shape=env.ob_robot_state_shape, ob_pcl_shape=env.ob_pcl_shape, nb_actions=nb_actions)
     actor.summary()
 
-    # critic
-    critic = build_critic_model(nb_obs + nb_actions)
-    critic.summary()
-
-    target_critic = build_critic_model(nb_obs + nb_actions)
-    target_critic.set_weights(critic.get_weights())
-
-    critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
-
-    # buffer
-    buffer = Buffer(buffer_capacity, batch_size)
-
-    obs_all = np.zeros((0, nb_obs))
+    #obs_all = np.array([ np.array([np.zeros(env.ob_robot_state_shape), np.zeros(env.pcl_feature_size)]) ]) #np.zeros((0, nb_obs))
+    #print('obs_all:', obs_all)
+    robot_state_all = np.zeros((0, env.ob_robot_state_shape))
+    pcl_feature_all = np.zeros((0, env.pcl_feature_size))
+    print('robot_state_all:', robot_state_all)
+    print('robot_state_all.shape:', robot_state_all.shape)
     actions_all = np.zeros((0, nb_actions))
     rewards_all = np.zeros((0, ))
 
@@ -251,7 +265,7 @@ if __name__ == '__main__':
         #     act = get_teacher_action(ob)
 
         action = get_teacher_action(expert, obs, env.action_space)
-        obs, reward, done, _ = env.step(action)
+        obs, reward, done, _ = env.step(action * env.action_space.high)
         obs_list.append(obs)
         action_list.append(action)
         reward_list.append(np.array([reward]))
@@ -263,18 +277,19 @@ if __name__ == '__main__':
 
     print('Packing data into arrays...')
     for obs, act, rew in zip(obs_list, action_list, reward_list):
-        obs_all = np.concatenate([obs_all, np.reshape(obs, [1,nb_obs])], axis=0)
+        robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
+        pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])
+        robot_state_all = np.concatenate([robot_state_all, robot_state], axis=0)
+        pcl_feature_all = np.concatenate([pcl_feature_all, pcl_feature], axis=0)
         actions_all = np.concatenate([actions_all, act], axis=0)
         rewards_all = np.concatenate([rewards_all, rew], axis=0)
-
+    
     # First train for actor network
-    actor.fit(obs_all, actions_all, batch_size=batch_size, epochs=nb_training_epoch, shuffle=True, verbose=0)
+    actor.fit([robot_state_all, pcl_feature_all], actions_all, batch_size=batch_size, epochs=nb_training_epoch, shuffle=True, verbose=0)
     output_file = open('results.txt', 'w')
 
     early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
     writer = SummaryWriter(comment="-rmf_dagger")
-
-    action_noise = NormalActionNoise(mu=np.zeros(nb_actions), sigma=float(stddev) * np.ones(nb_actions))
 
     episode_rew_queue = deque(maxlen=10)
 
@@ -285,36 +300,22 @@ if __name__ == '__main__':
         obs = env.reset()
         reward_sum = 0.0
 
-        epoch_critic_losses = []
-        for i in range(steps): #??????????????????
+        for i in range(steps):
             #print('obs:', obs)
+            robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
+            pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])            
             #start = timeit.default_timer()
-            action = actor(np.reshape(obs, [1,nb_obs]), training=False)  # assume symmetric action space (low = -high)
+            action = actor([robot_state, pcl_feature], training=False)  # assume symmetric action space (low = -high)
             #stop = timeit.default_timer()
-            #print('Time for actor prediction: ', stop - start)        
+            #print('Time for actor prediction: ', stop - start)
             #print('action:', action) # action = [[.]]
 
-            # add noise
-            if itr >= itr_learn_critic: # wait for critic to converge
-                noise = action_noise()
-                action += noise
-            
             action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
 
             new_obs, reward, done, _ = env.step(action * env.action_space.high)
-            buffer.record((obs, action, reward, new_obs))
             obs = new_obs
 
             reward_sum += reward
-    
-            # train critic
-            if (itr >= itr_learn_critic) and (i % 100 == 0):
-                if (buffer.buffer_counter >= buffer.batch_size):
-                    env.pause()
-                    critic_loss = buffer.learn()
-                    update_target(tau)
-                    epoch_critic_losses.append(critic_loss)
-                    env.unpause()
 
             if done is True:
                 episode_rew_queue.appendleft(reward_sum)
@@ -324,30 +325,31 @@ if __name__ == '__main__':
             else:
                 obs_list.append(obs)
 
-        env.pause()    
+        env.pause()
         mean_return = np.mean(episode_rew_queue)
         print('Episode done ', 'itr ', itr, ',i ', i, 'mean return', mean_return)
         writer.add_scalar("mean return", mean_return, itr)
-        writer.add_scalar("critic_losses", np.mean(epoch_critic_losses), itr)
 
         #if i==(steps-1):
         #    break
 
         for obs in obs_list:
-            obs_all = np.concatenate([obs_all, np.reshape(obs, [1,nb_obs])], axis=0)
+            #print('obs', obs)
+            robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
+            pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])
+            #print('robot_state:', robot_state)
+            robot_state_all = np.concatenate([robot_state_all, robot_state], axis=0)
+            pcl_feature_all = np.concatenate([pcl_feature_all, pcl_feature], axis=0)
             actions_all = np.concatenate([actions_all, get_teacher_action(expert, obs, env.action_space)], axis=0)
 
         # train actor
         if itr < itr_learn_critic:
-            actor.fit(obs_all, actions_all,
+            actor.fit([robot_state_all, pcl_feature_all], actions_all,
                         batch_size=batch_size,
                         epochs=nb_training_epoch,
                         shuffle=True,
                         validation_split=0.2, verbose=0,
-                        callbacks=[early_stop, tfdocs.modeling.EpochDots()])              
+                        callbacks=[early_stop, tfdocs.modeling.EpochDots()])
 
-    actor.save('dagger_actor_6state_tanh_no_limit', include_optimizer=False) # should we include optimizer?
-    actor.save_weights('weight_actor_6state_tanh_no_limit.h5')
-
-    critic.save('dagger_critic_6state_tanh_no_limit', include_optimizer=False) # should we include optimizer?
-    critic.save_weights('weight_critic_6state_tanh_no_limit.h5')
+    actor.save('dagger_actor_pcl', include_optimizer=False) # should we include optimizer?
+    actor.save_weights('weight_actor_pcl.h5')
