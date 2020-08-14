@@ -1,3 +1,5 @@
+import sys
+import rospy
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -13,6 +15,8 @@ from tensorboardX import SummaryWriter
 import timeit
 from baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise, OrnsteinUhlenbeckActionNoise
 from collections import deque
+from planner_msgs.srv import planner_search, planner_searchRequest
+from geometry_msgs.msg import Pose
 
 batch_size = 32
 steps = 2000
@@ -108,12 +112,50 @@ class Buffer:
         # )
         return critic_loss
 
-def get_teacher_action(expert, obs, action_space):
-    action = expert.calculate(obs)
-    #print('action before clip:', action)
-    action = tf.clip_by_value(action, action_space.low, action_space.high)
-    #print('action after clip:', action)
-    action = np.array([action])
+def get_teacher_action(planner, controller, augmented_obs, action_space):
+    request = planner_searchRequest()
+    request.use_current_state = False
+    source = Pose()
+    source.position.x = augmented_obs[0]
+    source.position.y = augmented_obs[1]
+    source.position.z = augmented_obs[2]
+    source.orientation.x = 0.0
+    source.orientation.y = 0.0
+    source.orientation.z = 0.0
+    source.orientation.w = 1.0
+    target = Pose()
+    target.position.x = augmented_obs[6]
+    target.position.y = augmented_obs[7]
+    target.position.z = augmented_obs[8]
+    target.orientation.x = 0.0
+    target.orientation.y = 0.0
+    target.orientation.z = 0.0
+    target.orientation.w = 1.0
+    request.source = source
+    request.target = target
+    response = planner(request)
+    path = response.path
+
+    if (len(path) > 1):
+        waypoint = path[1].position
+        vel_setpoint = np.array([waypoint.x - augmented_obs[0], waypoint.y - augmented_obs[1], waypoint.z - augmented_obs[2]])
+        if (len(path) > 5):
+            vel_magnitude = 1.0
+        else:
+            vel_magnitude = 0.15 * (len(path) - 1)
+        vel_setpoint_norm = np.linalg.norm(vel_setpoint)
+        if (vel_setpoint_norm != 0):
+            vel_setpoint = vel_setpoint * vel_magnitude / vel_setpoint_norm
+
+        obs = np.array([waypoint.x - augmented_obs[0], waypoint.y - augmented_obs[1], waypoint.z - augmented_obs[2],
+                    vel_setpoint[0] - augmented_obs[3], vel_setpoint[1] - augmented_obs[4], vel_setpoint[2] - augmented_obs[5]])
+        action = controller.calculate(obs)
+        action = tf.clip_by_value(action, -1.0, 1.0)
+        action = np.array([action])
+    elif (len(path) == 1):
+        action = np.array([[0.0, 0.0, 0.0]])
+    else: # cannot find a path
+        action = np.array([])        
     return action
 
 def pcl_encoder(input_shape):
@@ -142,8 +184,8 @@ def build_backbone(ob_robot_state_shape, ob_pcl_shape):
                                 name='fc1', activation='relu')(x)
     h2 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                 name='fc2', activation='relu')(h1)
-    backbone_model = tf.keras.Model(inputs=[robot_state_input, pcl_encoder_submodel.inputs[0]], outputs=[h2], name='backbone_net') 
-    return backbone_model                               
+    backbone_model = tf.keras.Model(inputs=[robot_state_input, pcl_encoder_submodel.inputs[0]], outputs=[h2], name='backbone_net')
+    return backbone_model
 
 def build_actor_model(ob_robot_state_shape, ob_pcl_shape, nb_actions):
     backbone = build_backbone(ob_robot_state_shape, ob_pcl_shape)
@@ -176,7 +218,7 @@ def build_critic_model(input_shape):
     # model.compile(loss='mse',
     #               optimizer=optimizer,
     #               metrics=['mse'])
-    return model    
+    return model
 
 # def build_critic_model(input_shape):
 #     # State as input
@@ -216,6 +258,28 @@ def update_target(tau):
     target_critic.set_weights(new_weights)
 
 if __name__ == '__main__':
+    #print('sys.argv:', sys.argv)
+    play = False
+    load_path = None
+    save_path = None
+    for i in range(len(sys.argv)):
+        if sys.argv[i] == '--play':
+            play = True
+            print('PLAY')
+            continue
+        index = sys.argv[i].find('--load_path')
+        if (index != -1):
+            load_path = sys.argv[i][12:]
+            continue
+        index = sys.argv[i].find('--save_path')
+        if (index != -1):
+            save_path = sys.argv[i][12:]
+            continue
+
+    # Initialize
+    env = RotorsWrappers()
+    planner_service = rospy.ServiceProxy('/gbplanner/search', planner_search)
+
     # Limiting GPU memory growth: https://www.tensorflow.org/guide/gpu
     gpus = tf.config.experimental.list_physical_devices('GPU')
     if gpus:
@@ -231,9 +295,7 @@ if __name__ == '__main__':
 
     #tf.keras.backend.set_floatx('float32')
 
-    # Initialize
-    env = RotorsWrappers()
-    expert = PID([1.0, 1.0, 1.0], [2.0, 2.0, 2.0])
+    pid = PID([1.0, 1.0, 1.0], [2.0, 2.0, 2.0])
 
     nb_actions = env.action_space.shape[-1]
     nb_obs = env.observation_space.shape[-1]
@@ -241,115 +303,167 @@ if __name__ == '__main__':
     # actor
     actor = build_actor_model(ob_robot_state_shape=env.ob_robot_state_shape, ob_pcl_shape=env.ob_pcl_shape, nb_actions=nb_actions)
     actor.summary()
+    if (load_path != None):
+        print('load model from path:', load_path)
+        actor.load_weights(load_path)
 
-    #obs_all = np.array([ np.array([np.zeros(env.ob_robot_state_shape), np.zeros(env.pcl_feature_size)]) ]) #np.zeros((0, nb_obs))
-    #print('obs_all:', obs_all)
-    robot_state_all = np.zeros((0, env.ob_robot_state_shape))
-    pcl_feature_all = np.zeros((0, env.pcl_feature_size))
-    print('robot_state_all:', robot_state_all)
-    print('robot_state_all.shape:', robot_state_all.shape)
-    actions_all = np.zeros((0, nb_actions))
-    rewards_all = np.zeros((0, ))
-
-    obs_list = []
-    action_list = []
-    reward_list = []
-
-    # Collect data with expert in first iteration
-    obs = env.reset()
-    print('Collecting data...')
-    for i in range(steps):
-        # if i == 0:
-        #     act = np.array([0.0])
-        # else:
-        #     act = get_teacher_action(ob)
-
-        action = get_teacher_action(expert, obs, env.action_space)
-        obs, reward, done, _ = env.step(action * env.action_space.high)
-        obs_list.append(obs)
-        action_list.append(action)
-        reward_list.append(np.array([reward]))
-
-        if done:
-            obs = env.reset()
-
-    env.pause()
-
-    print('Packing data into arrays...')
-    for obs, act, rew in zip(obs_list, action_list, reward_list):
-        robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
-        pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])
-        robot_state_all = np.concatenate([robot_state_all, robot_state], axis=0)
-        pcl_feature_all = np.concatenate([pcl_feature_all, pcl_feature], axis=0)
-        actions_all = np.concatenate([actions_all, act], axis=0)
-        rewards_all = np.concatenate([rewards_all, rew], axis=0)
-    
-    # First train for actor network
-    actor.fit([robot_state_all, pcl_feature_all], actions_all, batch_size=batch_size, epochs=nb_training_epoch, shuffle=True, verbose=0)
-    output_file = open('results.txt', 'w')
-
-    early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
-    writer = SummaryWriter(comment="-rmf_dagger")
+    writer = SummaryWriter(comment="-rmf_dagger_pcl")
 
     episode_rew_queue = deque(maxlen=10)
 
-    # Aggregate and retrain actor network
-    for itr in range(dagger_itr):
-        obs_list = []
-
+    if play:
         obs = env.reset()
         reward_sum = 0.0
+        itr = 0
+        while True:
+            for i in range(steps):
+                #print('obs:', obs)
+                robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
+                pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])
+                #start = timeit.default_timer()
+                action = actor([robot_state, pcl_feature], training=False)  # assume symmetric action space (low = -high)
+                #stop = timeit.default_timer()
+                #print('Time for actor prediction: ', stop - start)
 
+                action = tf.clip_by_value(action, -1.0, 1.0)
+
+                obs, reward, done, _ = env.step(action * env.action_space.high)
+                reward_sum += reward
+
+                if done is True:
+                    episode_rew_queue.appendleft(reward_sum)
+                    reward_sum = 0.0
+                    obs = env.reset()
+
+            mean_return = np.mean(episode_rew_queue)
+            print('Episode done ', 'itr ', itr, 'mean return', mean_return)
+            writer.add_scalar("mean return", mean_return, itr)
+            itr += 1 
+
+    else: # training mode
+        robot_state_all = np.zeros((0, env.ob_robot_state_shape))
+        pcl_feature_all = np.zeros((0, env.pcl_feature_size))
+        print('robot_state_all:', robot_state_all)
+        print('robot_state_all.shape:', robot_state_all.shape)
+        actions_all = np.zeros((0, nb_actions))
+        rewards_all = np.zeros((0, ))
+
+        obs_list = []
+        augmented_obs_list = []
+        action_list = []
+        reward_list = []
+
+        # Collect data with expert in first iteration
+        obs = env.reset()
+        augmented_obs = env.get_augmented_obs()
+        print('Collecting data...')
         for i in range(steps):
-            #print('obs:', obs)
-            robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
-            pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])            
-            #start = timeit.default_timer()
-            action = actor([robot_state, pcl_feature], training=False)  # assume symmetric action space (low = -high)
-            #stop = timeit.default_timer()
-            #print('Time for actor prediction: ', stop - start)
-            #print('action:', action) # action = [[.]]
+            # if i == 0:
+            #     act = np.array([0.0])
+            # else:
+            #     act = get_teacher_action(ob)
 
-            action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
-
-            new_obs, reward, done, _ = env.step(action * env.action_space.high)
-            obs = new_obs
-
-            reward_sum += reward
-
-            if done is True:
-                episode_rew_queue.appendleft(reward_sum)
-                reward_sum = 0
+            action = get_teacher_action(planner_service, pid, augmented_obs, env.action_space)
+            while len(action) == 0:
+                print('no expert path')
                 obs = env.reset()
-                continue
-            else:
-                obs_list.append(obs)
+                augmented_obs = env.get_augmented_obs()
+                action = get_teacher_action(planner_service, pid, augmented_obs, env.action_space)                
+            obs, reward, done, _ = env.step(action * env.action_space.high)
+            augmented_obs = env.get_augmented_obs()
+            obs_list.append(obs)
+            augmented_obs_list.append(augmented_obs)
+            action_list.append(action)
+            reward_list.append(np.array([reward]))
+
+            if done:
+                obs = env.reset()
+                augmented_obs = env.get_augmented_obs()
 
         env.pause()
-        mean_return = np.mean(episode_rew_queue)
-        print('Episode done ', 'itr ', itr, ',i ', i, 'mean return', mean_return)
-        writer.add_scalar("mean return", mean_return, itr)
 
-        #if i==(steps-1):
-        #    break
-
-        for obs in obs_list:
-            #print('obs', obs)
+        print('Packing data into arrays...')
+        for obs, act, rew in zip(obs_list, action_list, reward_list):
             robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
             pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])
-            #print('robot_state:', robot_state)
             robot_state_all = np.concatenate([robot_state_all, robot_state], axis=0)
             pcl_feature_all = np.concatenate([pcl_feature_all, pcl_feature], axis=0)
-            actions_all = np.concatenate([actions_all, get_teacher_action(expert, obs, env.action_space)], axis=0)
+            actions_all = np.concatenate([actions_all, act], axis=0)
+            rewards_all = np.concatenate([rewards_all, rew], axis=0)
 
-        # train actor
-        if itr < itr_learn_critic:
-            actor.fit([robot_state_all, pcl_feature_all], actions_all,
-                        batch_size=batch_size,
-                        epochs=nb_training_epoch,
-                        shuffle=True,
-                        validation_split=0.2, verbose=0,
-                        callbacks=[early_stop, tfdocs.modeling.EpochDots()])
+        # First train for actor network
+        actor.fit([robot_state_all, pcl_feature_all], actions_all, batch_size=batch_size, epochs=nb_training_epoch, shuffle=True, verbose=0)
+        output_file = open('results.txt', 'w')
 
-    actor.save('dagger_actor_pcl', include_optimizer=False) # should we include optimizer?
-    actor.save_weights('weight_actor_pcl.h5')
+        early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
+
+        # Aggregate and retrain actor network
+        for itr in range(dagger_itr):
+            obs_list = []
+
+            obs = env.reset()
+            reward_sum = 0.0
+
+            for i in range(steps):
+                #print('obs:', obs)
+                robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
+                pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])
+                #start = timeit.default_timer()
+                action = actor([robot_state, pcl_feature], training=False)  # assume symmetric action space (low = -high)
+                #stop = timeit.default_timer()
+                #print('Time for actor prediction: ', stop - start)
+                #print('action:', action) # action = [[.]]
+
+                action = tf.clip_by_value(action, -1, 1)
+
+                new_obs, reward, done, _ = env.step(action * env.action_space.high)
+                augmented_obs = env.get_augmented_obs()
+                obs = new_obs
+
+                reward_sum += reward
+
+                if done is True:
+                    episode_rew_queue.appendleft(reward_sum)
+                    reward_sum = 0
+                    obs = env.reset()
+                    augmented_obs = env.get_augmented_obs()
+                    continue
+                else:
+                    obs_list.append(obs)
+                    augmented_obs_list.append(augmented_obs)
+
+            env.pause()
+            mean_return = np.mean(episode_rew_queue)
+            print('Episode done ', 'itr ', itr, ',i ', i, 'mean return', mean_return)
+            writer.add_scalar("mean return", mean_return, itr)
+
+            #if i==(steps-1):
+            #    break
+
+            for obs, augmented_obs in zip(obs_list, augmented_obs_list):
+                teacher_action = get_teacher_action(planner_service, pid, augmented_obs, env.action_space)
+                if len(teacher_action) == 0:
+                    print('found no expert path')
+                    continue
+                #print('obs', obs)
+                robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
+                pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])
+                #print('robot_state:', robot_state)
+                robot_state_all = np.concatenate([robot_state_all, robot_state], axis=0)
+                pcl_feature_all = np.concatenate([pcl_feature_all, pcl_feature], axis=0)
+                actions_all = np.concatenate([actions_all, teacher_action], axis=0)
+
+            # train actor
+            if itr < itr_learn_critic:
+                actor.fit([robot_state_all, pcl_feature_all], actions_all,
+                            batch_size=batch_size,
+                            epochs=nb_training_epoch,
+                            shuffle=True,
+                            validation_split=0.2, verbose=0,
+                            callbacks=[early_stop, tfdocs.modeling.EpochDots()])
+
+        if (save_path != None):
+            #actor.save('dagger_actor_pcl', include_optimizer=False) # should we include optimizer?
+            print('save weights to file:', save_path)
+            actor.save_weights(save_path + '/dagger_pcl.h5')
+            actor.save_weights('dagger_pcl.h5')
