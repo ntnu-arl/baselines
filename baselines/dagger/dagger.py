@@ -400,6 +400,7 @@ if __name__ == '__main__':
         # Aggregate and retrain actor network
         for itr in range(dagger_itr):
             obs_list = []
+            augmented_obs_list = []
 
             obs = env.reset()
             reward_sum = 0.0
