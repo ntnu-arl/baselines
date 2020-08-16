@@ -21,9 +21,7 @@ from geometry_msgs.msg import Pose
 batch_size = 32
 steps = 2000
 nb_training_epoch = 50
-dagger_itr = 20 #200
-itr_learn_critic = 5
-critic_lr = 1e-4
+dagger_itr = 100
 gamma = 0.99 # Discount factor for future rewards
 tau = 0.001 # Used to update target networks
 buffer_capacity=50000
@@ -455,16 +453,16 @@ if __name__ == '__main__':
                 actions_all = np.concatenate([actions_all, teacher_action], axis=0)
 
             # train actor
-            if itr < itr_learn_critic:
-                actor.fit([robot_state_all, pcl_feature_all], actions_all,
+            actor.fit([robot_state_all, pcl_feature_all], actions_all,
                             batch_size=batch_size,
                             epochs=nb_training_epoch,
                             shuffle=True,
                             validation_split=0.2, verbose=0,
                             callbacks=[early_stop, tfdocs.modeling.EpochDots()])
-
+        
+        actor.save_weights('dagger_pcl.h5')
         if (save_path != None):
             #actor.save('dagger_actor_pcl', include_optimizer=False) # should we include optimizer?
             print('save weights to file:', save_path)
             actor.save_weights(save_path + '/dagger_pcl.h5')
-            actor.save_weights('dagger_pcl.h5')
+
