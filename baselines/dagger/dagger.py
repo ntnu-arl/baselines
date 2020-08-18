@@ -21,10 +21,11 @@ from geometry_msgs.msg import Pose
 batch_size = 32
 steps = 2000
 nb_training_epoch = 50
-dagger_itr = 100
+dagger_itr = 20
+dagger_buffer_size = 40000
 gamma = 0.99 # Discount factor for future rewards
 tau = 0.001 # Used to update target networks
-buffer_capacity=50000
+buffer_capacity=50000 # unused now!
 stddev = 0.1
 
 import tensorflow as tf
@@ -167,7 +168,7 @@ def pcl_encoder(input_shape):
     # Generate the latent vector
     latent = tf.keras.layers.Flatten()(x)
     encoder = tf.keras.Model(inputs, latent, name='encoder')
-    encoder.summary()
+    #encoder.summary()
     return encoder
 
 # build network
@@ -396,6 +397,7 @@ if __name__ == '__main__':
         early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
 
         # Aggregate and retrain actor network
+        dagger_buffer_cnt = 0
         for itr in range(dagger_itr):
             obs_list = []
             augmented_obs_list = []
@@ -448,9 +450,18 @@ if __name__ == '__main__':
                 robot_state = np.reshape(obs[0:env.ob_robot_state_shape], [1, env.ob_robot_state_shape])
                 pcl_feature = np.reshape(obs[env.ob_robot_state_shape:], [1, env.pcl_feature_size])
                 #print('robot_state:', robot_state)
-                robot_state_all = np.concatenate([robot_state_all, robot_state], axis=0)
-                pcl_feature_all = np.concatenate([pcl_feature_all, pcl_feature], axis=0)
-                actions_all = np.concatenate([actions_all, teacher_action], axis=0)
+                if (len(actions_all) < dagger_buffer_size):
+                    robot_state_all = np.concatenate([robot_state_all, robot_state], axis=0)
+                    pcl_feature_all = np.concatenate([pcl_feature_all, pcl_feature], axis=0)
+                    actions_all = np.concatenate([actions_all, teacher_action], axis=0)
+                else: # buffer is full
+                    robot_state_all[dagger_buffer_cnt] = robot_state
+                    pcl_feature_all[dagger_buffer_cnt] = pcl_feature
+                    actions_all[dagger_buffer_cnt] = teacher_action
+                    dagger_buffer_cnt += 1
+                    if (dagger_buffer_cnt == dagger_buffer_size):
+                        print('reset dagger_buffer_cnt')
+                        dagger_buffer_cnt = 0
 
             # train actor
             actor.fit([robot_state_all, pcl_feature_all], actions_all,

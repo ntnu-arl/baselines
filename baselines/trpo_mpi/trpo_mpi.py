@@ -104,14 +104,14 @@ def learn(*,
         env,
         total_timesteps,
         timesteps_per_batch=1024, # what to train on
-        max_kl=0.005,
+        max_kl=0.001,
         cg_iters=10,
         gamma=0.99,
         lam=1.0, # advantage estimation
         seed=None,
         ent_coef=0.0,
         cg_damping=1e-2,
-        vf_stepsize=5e-4,
+        vf_stepsize=3e-4,
         vf_iters =3,
         max_episodes=0, max_iters=0,  # time constraint
         callback=None,
@@ -227,9 +227,9 @@ def learn(*,
     @tf.function
     def compute_lossandgrad(ob, ac, atarg):
         with tf.GradientTape() as tape:
-            old_policy_latent = oldpi.policy_network(ob)
+            old_policy_latent = oldpi.policy_network([ob[:,0:8], ob[:,8:]])
             old_pd, _ = oldpi.pdtype.pdfromlatent(old_policy_latent)
-            policy_latent = pi.policy_network(ob)
+            policy_latent = pi.policy_network([ob[:,0:8], ob[:,8:]])
             pd, _ = pi.pdtype.pdfromlatent(policy_latent)
             kloldnew = old_pd.kl(pd)
             ent = pd.entropy()
@@ -245,9 +245,9 @@ def learn(*,
 
     @tf.function
     def compute_losses(ob, ac, atarg):
-        old_policy_latent = oldpi.policy_network(ob)
+        old_policy_latent = oldpi.policy_network([ob[:,0:8], ob[:,8:]])
         old_pd, _ = oldpi.pdtype.pdfromlatent(old_policy_latent)
-        policy_latent = pi.policy_network(ob)
+        policy_latent = pi.policy_network([ob[:,0:8], ob[:,8:]])
         pd, _ = pi.pdtype.pdfromlatent(policy_latent)
         kloldnew = old_pd.kl(pd)
         ent = pd.entropy()
@@ -273,9 +273,9 @@ def learn(*,
     def compute_fvp(flat_tangent, ob, ac, atarg):
         with tf.GradientTape() as outter_tape:
             with tf.GradientTape() as inner_tape:
-                old_policy_latent = oldpi.policy_network(ob)
+                old_policy_latent = oldpi.policy_network([ob[:,0:8], ob[:,8:]])
                 old_pd, _ = oldpi.pdtype.pdfromlatent(old_policy_latent)
-                policy_latent = pi.policy_network(ob)
+                policy_latent = pi.policy_network([ob[:,0:8], ob[:,8:]])
                 pd, _ = pi.pdtype.pdfromlatent(policy_latent)
                 kloldnew = old_pd.kl(pd)
                 meankl = tf.reduce_mean(kloldnew)

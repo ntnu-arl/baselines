@@ -69,11 +69,11 @@ class CategoricalPdType(PdType):
         return tf.int32
 
 class DiagGaussianPdType(PdType):
-    def __init__(self, latent_shape, size, init_scale=1.0, init_bias=0.0):
+    def __init__(self, latent_shape, size, init_scale=1.0, init_bias=0.0, activation=None):
         self.size = size
-        self.matching_fc = _matching_fc(latent_shape, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
+        self.matching_fc = _matching_fc(latent_shape, 'pi', self.size, init_scale=init_scale, init_bias=init_bias, activation=activation)
         #self.logstd = tf.Variable(np.zeros((1, self.size)), name='pi/logstd', dtype=tf.float32)
-        self.logstd = tf.Variable(-1*np.ones((1, self.size)), name='pi/logstd', dtype=tf.float32)
+        self.logstd = tf.Variable(-0.5*np.ones((1, self.size)), name='pi/logstd', dtype=tf.float32)
 
     def pdclass(self):
         return DiagGaussianPd
@@ -171,18 +171,18 @@ class DiagGaussianPd(Pd):
     def fromflat(cls, flat):
         return cls(flat)
 
-def make_pdtype(latent_shape, ac_space, init_scale=1.0):
+def make_pdtype(latent_shape, ac_space, init_scale=1.0, activation=None):
     from gym import spaces
     if isinstance(ac_space, spaces.Box):
         assert len(ac_space.shape) == 1
-        return DiagGaussianPdType(latent_shape, ac_space.shape[0], init_scale)
+        return DiagGaussianPdType(latent_shape, ac_space.shape[0], init_scale, activation=activation)
     elif isinstance(ac_space, spaces.Discrete):
         return CategoricalPdType(latent_shape, ac_space.n, init_scale)
     else:
         raise ValueError('No implementation for {}'.format(ac_space))
 
-def _matching_fc(tensor_shape, name, size, init_scale, init_bias):
+def _matching_fc(tensor_shape, name, size, init_scale, init_bias, activation=None):
     if tensor_shape[-1] == size:
         return lambda x: x
     else:
-        return fc(tensor_shape, name, size, init_scale=init_scale, init_bias=init_bias)
+        return fc(tensor_shape, name, size, init_scale=init_scale, init_bias=init_bias, activation=activation)
