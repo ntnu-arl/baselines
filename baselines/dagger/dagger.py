@@ -21,7 +21,7 @@ from geometry_msgs.msg import Pose
 batch_size = 32
 steps = 2000
 nb_training_epoch = 50
-dagger_itr = 20
+dagger_itr = 100
 dagger_buffer_size = 40000
 gamma = 0.99 # Discount factor for future rewards
 tau = 0.001 # Used to update target networks
@@ -310,6 +310,8 @@ if __name__ == '__main__':
 
     episode_rew_queue = deque(maxlen=10)
 
+    max_mean_return = -100000
+
     if play:
         obs = env.reset()
         reward_sum = 0.0
@@ -437,6 +439,9 @@ if __name__ == '__main__':
             mean_return = np.mean(episode_rew_queue)
             print('Episode done ', 'itr ', itr, ',i ', i, 'mean return', mean_return)
             writer.add_scalar("mean return", mean_return, itr)
+            if (mean_return > max_mean_return):
+                max_mean_return = mean_return
+                actor.save_weights('dagger_pcl_itr' + str(itr) + '.h5')
 
             #if i==(steps-1):
             #    break
@@ -467,9 +472,9 @@ if __name__ == '__main__':
             actor.fit([robot_state_all, pcl_feature_all], actions_all,
                             batch_size=batch_size,
                             epochs=nb_training_epoch,
-                            shuffle=True,
-                            validation_split=0.2, verbose=0,
-                            callbacks=[early_stop, tfdocs.modeling.EpochDots()])
+                            shuffle=True)
+                            #validation_split=0.2, verbose=0,
+                            #callbacks=[early_stop, tfdocs.modeling.EpochDots()])
         
         actor.save_weights('dagger_pcl.h5')
         if (save_path != None):
