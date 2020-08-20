@@ -61,12 +61,14 @@ class RotorsWrappers:
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
+        self.contact_collision_check_subcriber = rospy.Subscriber("/delta_collision_check/delta_collision_check_contact", ContactsState, self.contact_collision_check_callback)
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
         self.pcl_feature_subscriber = rospy.Subscriber('/lidar_depth_feature', Float64MultiArray, self.pcl_feature_callback)
 
         self.goal_training_publisher = rospy.Publisher("/delta/goal_training", Pose)
-        self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
+        self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry) # for debug
         self.goal_init_publisher = rospy.Publisher("/delta/goal", Pose)
+        self.goal_robot2_init_publisher = rospy.Publisher("/delta_collision_check/goal", Pose)
         self.cmd_publisher = rospy.Publisher("/delta/command/rate_thrust", RateThrust)
         self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=1)
         self.sphere_marker_pub = rospy.Publisher('goal_published',
@@ -74,19 +76,38 @@ class RotorsWrappers:
                                                  queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-        self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)        
+        self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)  
+
+        self.collide = False
+        self.collide2 = False     
+
+        self.robot2_pose = Pose()
+        self.robot2_pose.position.x = self.max_wp_x + 5.0
+        self.robot2_pose.position.y = self.max_wp_y + 5.0
+        self.robot2_pose.position.z = 10.0
+        self.robot2_pose.orientation.x = 0
+        self.robot2_pose.orientation.y = 0
+        self.robot2_pose.orientation.z = 0
+        self.robot2_pose.orientation.w = 1         
+
+        self.spawn_robot2(self.robot2_pose)
+        self.goal_robot2_init_publisher.publish(self.robot2_pose)
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 2.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.5)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
+        )
+        self.robot2_collision_frame = rospy.get_param(
+            'robot2_collision_frame',
+            'delta_collision_check::delta_collision_check/base_link::delta_collision_check/base_link_fixed_joint_lump__delta_collision_check_collision_collision'
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
@@ -226,6 +247,23 @@ class RotorsWrappers:
             else:
                 rospy.logdebug('Contact not found yet ...')
 
+    def contact_collision_check_callback(self, msg):
+        # Check inside the models states for robot's contact state
+        for i in range(len(msg.states)):
+            if (msg.states[i].collision1_name == self.robot2_collision_frame):
+                print('Contact robot2 found!')
+                rospy.logdebug('Contact robot2 found!')
+                self.collide2 = True
+                if (msg.states[i].collision2_name ==
+                        self.ground_collision_frame):
+                    rospy.logdebug('Robot2 colliding with the ground')
+                else:
+                    rospy.logdebug(
+                        'Robot2 colliding with something else (not ground)')
+                    #self.reset()
+            else:
+                rospy.logdebug('Contact robot2 not found yet ...')                
+
     # Input:    robot_odom  : Odometry()
     #           goal        : Pose(), in vehicle frame
     # Return:   current_goal  : Pose(), in world frame
@@ -283,7 +321,7 @@ class RotorsWrappers:
         # print('R:', R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix())
 
         goal_odom.header.stamp = robot_odom.header.stamp
-        goal_odom.header.frame_id = "vehicle_frame"
+        goal_odom.header.frame_id = "/delta" #"vehicle_frame"
         goal_odom.pose.pose.position.x = goal_pos_in_vehicle[0]
         goal_odom.pose.pose.position.y = goal_pos_in_vehicle[1]
         goal_odom.pose.pose.position.z = goal_pos_in_vehicle[2]
@@ -406,22 +444,26 @@ class RotorsWrappers:
 
     def reset(self):
         # check if the start position collides with env
-        start_pose, collide = self.spawn_robot(None)
+        start_pose, collide = self.spawn_robot2(None)
         while collide:
             #rospy.loginfo('INVALID start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
-            start_pose, collide = self.spawn_robot(None)
+            start_pose, collide = self.spawn_robot2(None)
 
         #rospy.loginfo('New start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
         
         # check if the end position collides with env: fix it, so stupid!
         goal, r = self.generate_new_goal(start_pose)
-        _, collide = self.spawn_robot(goal)
+        _, collide = self.spawn_robot2(goal)
         while collide:
             #rospy.loginfo('INVALID end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
             goal, r = self.generate_new_goal(start_pose)
-            _, collide = self.spawn_robot(goal)
+            _, collide = self.spawn_robot2(goal)
         
         #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
+
+        # put the robot2 somewhere
+        self.spawn_robot2(self.robot2_pose)
+        self.goal_robot2_init_publisher.publish(self.robot2_pose)
 
         # put the robot at the start pose
         self.spawn_robot(start_pose)
@@ -490,6 +532,49 @@ class RotorsWrappers:
             rospy.sleep(0.001)
             pass        
         return new_position.pose, self.collide
+
+    def spawn_robot2(self, pose = None):
+        #rospy.loginfo('Pausing physics')
+        self.pause_physics_proxy(EmptyRequest())
+
+        new_position = ModelState()
+        new_position.model_name = 'delta_collision_check'
+        new_position.reference_frame = 'world'
+        
+        # Fill in the new position of the robot
+        if (pose == None):
+            # randomize initial position (TODO: angle?, velocity?)
+            state_high = np.array([self.max_wp_x, self.max_wp_y, self.max_init_z], dtype=np.float32)
+            state_low = np.array([self.min_wp_x, self.min_wp_y, self.min_init_z], dtype=np.float32)
+            state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
+            new_position.pose.position.x = state_init[0]
+            new_position.pose.position.y = state_init[1]
+            new_position.pose.position.z = state_init[2]
+            new_position.pose.orientation.x = 0
+            new_position.pose.orientation.y = 0
+            new_position.pose.orientation.z = 0
+            new_position.pose.orientation.w = 1
+        else:
+            new_position.pose = pose    
+        # Fill in the new twist of the robot
+        new_position.twist.linear.x = 0
+        new_position.twist.linear.y = 0
+        new_position.twist.linear.z = 0
+        new_position.twist.angular.x = 0
+        new_position.twist.angular.y = 0
+        new_position.twist.angular.z = 0
+        #rospy.loginfo('Placing robot')
+        self.model_state_publisher.publish(new_position)
+
+        self.collide2 = False
+
+        #rospy.loginfo('Unpausing physics')
+        self.unpause_physics_proxy(EmptyRequest())
+
+        self.collide2 = False
+
+        rospy.sleep(0.1)        
+        return new_position.pose, self.collide2
 
     def reset_timer(self, time):
         #rospy.loginfo('Resetting the timeout timer')
