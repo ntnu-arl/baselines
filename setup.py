@@ -38,7 +38,7 @@ setup(name='baselines',
           'joblib',
           'dill',
           'progressbar2',
-          'cloudpickle',
+          'cloudpickle==1.2.0',
           'click',
           'opencv-python'
       ],
