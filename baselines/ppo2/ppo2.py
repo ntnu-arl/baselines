@@ -11,7 +11,7 @@ try:
 except ImportError:
     MPI = None
 from baselines.ppo2.runner import Runner
-
+from tensorboardX import SummaryWriter
 
 def constfn(val):
     def f(_):
@@ -125,6 +125,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     # Start total timer
     tfirststart = time.perf_counter()
 
+    # plot values during training and evaluation
+    writer = SummaryWriter(comment="-ARC")
+
     nupdates = total_timesteps//nbatch
     for update in range(1, nupdates+1):
         assert nbatch % nminibatches == 0
@@ -198,7 +201,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             logger.logkv("misc/total_timesteps", update*nbatch)
             logger.logkv("fps", fps)
             logger.logkv("misc/explained_variance", float(ev))
-            logger.logkv('eprewmean', safemean([epinfo['r'] for epinfo in epinfobuf]))
+            eprewmean = safemean([epinfo['r'] for epinfo in epinfobuf])
+            logger.logkv('eprewmean', eprewmean)
+            writer.add_scalar('Episode reward mean', eprewmean, update*nbatch)
             logger.logkv('eplenmean', safemean([epinfo['l'] for epinfo in epinfobuf]))
             if eval_env is not None:
                 logger.logkv('eval_eprewmean', safemean([epinfo['r'] for epinfo in eval_epinfobuf]) )
@@ -206,6 +211,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             logger.logkv('misc/time_elapsed', tnow - tfirststart)
             for (lossval, lossname) in zip(lossvals, model.loss_names):
                 logger.logkv('loss/' + lossname, lossval)
+                if (lossname == 'policy_loss'):
+                    writer.add_scalar('Policy loss', lossval, update*nbatch)
+                elif (lossname == 'value_loss'):
+                    writer.add_scalar('Value loss', lossval, update*nbatch)    
 
             logger.dumpkvs()
         if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and is_mpi_root:
