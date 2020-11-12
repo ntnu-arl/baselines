@@ -34,8 +34,8 @@ def learn(network, env,
           normalize_returns=False,
           normalize_observations=True,
           critic_l2_reg=0.0,
-          actor_lr=1e-5, 
-          critic_lr=1e-5,
+          actor_lr=1e-4, 
+          critic_lr=1e-4,
           popart=False,
           gamma=0.99,
           clip_norm=None,
@@ -298,13 +298,13 @@ def learn(network, env,
         writer.add_scalar("rollout/return", combined_stats['rollout/return'], combined_stats['total/epochs'])
         writer.add_scalar("train/loss_actor", combined_stats['train/loss_actor'], combined_stats['total/epochs'])
         writer.add_scalar("train/loss_critic", combined_stats['train/loss_critic'], combined_stats['total/epochs'])
-        if (save_model) and (combined_stats['total/epochs'] > 1) and (combined_stats['rollout/return'] > best_return):
+        if (epoch%4==0) or (epoch==(nb_epochs-1)): #(save_model) and (combined_stats['total/epochs'] > 1) and (combined_stats['rollout/return'] > best_return):
             save_path_tmp = osp.expanduser(save_path + "/epoch" + str(combined_stats['total/epochs']))
             ckpt = tf.train.Checkpoint(model=agent)
             manager = tf.train.CheckpointManager(ckpt, save_path_tmp, max_to_keep=None)
             manager.save()
             best_return = combined_stats['rollout/return']
-            print('save model in epoch:', epoch)
+        print('save model in epoch:', epoch)
 
         for key in sorted(combined_stats.keys()):
             logger.record_tabular(key, combined_stats[key])

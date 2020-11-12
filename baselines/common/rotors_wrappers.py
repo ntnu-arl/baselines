@@ -78,14 +78,14 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.4)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05])
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.15, 0.15, 0.25])
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
@@ -93,7 +93,7 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 1.0)
+        self.goal_reward = rospy.get_param('goal_reward', 1000.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
         self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
 
