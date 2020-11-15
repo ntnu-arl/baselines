@@ -78,7 +78,7 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.4)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -89,7 +89,7 @@ class RotorsWrappers:
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
-        self.R_action = rospy.get_param('R_action', [0.001, 0.001, 0.001])
+        self.R_action = rospy.get_param('R_action', [0.005, 0.005, 0.005])
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
@@ -133,9 +133,9 @@ class RotorsWrappers:
         self.done = False        
         
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
-            reward = reward + self.goal_reward
-            self.done = True
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.2):
+            reward = reward + self.goal_reward -xT_Qx
+            self.done = False
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
