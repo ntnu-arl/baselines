@@ -338,13 +338,11 @@ if __name__ == '__main__':
             actions_all = np.concatenate([actions_all, get_teacher_action(expert, obs, env.action_space)], axis=0)
 
         # train actor
-        if itr < itr_learn_critic:
-            actor.fit(obs_all, actions_all,
-                        batch_size=batch_size,
-                        epochs=nb_training_epoch,
-                        shuffle=True)
-                        #validation_split=0.2, verbose=0,
-                        #callbacks=[early_stop, tfdocs.modeling.EpochDots()])              
+        #if itr < itr_learn_critic:
+        actor.fit(obs_all, actions_all,
+                    batch_size=batch_size,
+                    epochs=nb_training_epoch,
+                    shuffle=True)
 
     actor.save('dagger_actor_6state_tanh_no_limit', include_optimizer=False) # should we include optimizer?
     actor.save_weights('weight_actor_6state_tanh_no_limit.h5')
