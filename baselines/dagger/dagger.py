@@ -16,13 +16,10 @@ import gym
 import gym_arc
 
 batch_size = 32
-steps = 2048
+steps = 2048    
 nb_training_epoch = 50
-dagger_itr = 20 #200
-gamma = 0.99 # Discount factor for future rewards
-stddev = 0.1
-
-import tensorflow as tf
+dagger_itr = 15 #200
+visualization = True
 
 class bcolors:
         HEADER = '\033[95m'
@@ -176,7 +173,8 @@ if __name__ == '__main__':
             scaled_obs = obs / env.observation_space.high
             reward_list.append(np.array([reward]))
             
-            env.render(False)
+            if visualization:
+                env.render(False)
             
             if done:
                 obs = env.reset()
@@ -221,7 +219,9 @@ if __name__ == '__main__':
                 new_obs_scaled = new_obs / env.observation_space.high
                 scaled_obs = new_obs_scaled
                 obs = new_obs
-                env.render(False)
+
+                if visualization:
+                    env.render(False)
 
                 reward_sum += reward
 
