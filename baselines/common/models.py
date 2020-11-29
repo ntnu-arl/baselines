@@ -104,7 +104,7 @@ def mlp_rmf_actor():
         # h = tf.keras.layers.Flatten(x_input)
         h = x_input
 
-        h1 = tf.keras.layers.Dense(units=128, kernel_initializer=ortho_init(np.sqrt(2)),
+        h1 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                     name='mlp_fc1', activation='relu')(h)
         h2 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                     name='mlp_fc2', activation='relu')(h1)
@@ -123,7 +123,7 @@ def mlp_rmf_critic():
         # h = tf.keras.layers.Flatten(x_input)
         h = x_input
 
-        h1 = tf.keras.layers.Dense(units=128, kernel_initializer=ortho_init(np.sqrt(2)),
+        h1 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                     name='mlp_fc1', activation='relu')(h)
         h2 = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                     name='mlp_fc2', activation='relu')(h1)

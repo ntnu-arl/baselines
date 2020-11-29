@@ -236,34 +236,73 @@ def main(args):
         manager.save()
 
     if args.play:
-        logger.log("Running trained model")
+        logger.log("Running trained model and saving it")
         obs = env.reset()
         if not isinstance(env, VecEnv):
             obs = np.expand_dims(np.array(obs), axis=0)
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
 
-        episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
-        episode_rew_queue = deque(maxlen=10)
-        queue_cnt = 0
+        new_goal = True
+        reach_goal_trajectory_list = []
+
+        #episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
+        #episode_rew_queue = deque(maxlen=10)
+        #queue_cnt = 0
         while True:
+
+            if new_goal:
+                reach_goal_trajectory = np.array([])
+                new_goal = False
+
             if state is not None:
                 actions, _, state, _ = model.step(obs)
             else:
                 actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions.numpy())
+
+            reach_goal_trajectory = np.concatenate((reach_goal_trajectory, obs[0:3]))
+            reach_goal_trajectory_list.append(obs[0:3])
+
             if not isinstance(env, VecEnv):
                 obs = np.expand_dims(np.array(obs), axis=0)
-            episode_rew += rew
+            #episode_rew += rew
             #env.render()
             done_any = done.any() if isinstance(done, np.ndarray) else done
+            status = info.get('status')
+
             if done_any:
-                for i in np.nonzero(done)[0]:
-                    episode_rew_queue.appendleft(episode_rew[i])
-                    episode_rew[i] = 0
-                    print('episode_rew mean={}'.format(np.mean(episode_rew_queue)))
-                obs = env.reset()    
+                #for i in np.nonzero(done)[0]:
+                #    episode_rew_queue.appendleft(episode_rew[i])
+                #    episode_rew[i] = 0
+                #    print('episode_rew mean={}'.format(np.mean(episode_rew_queue)))
+                if status == 'timeout':
+                    print('Timed out')
+                    timed_out = True
+                else:
+                    print('something else stopped')
+                    timed_out = False
+
+                #save trajectory and calculate stuff
+
+                while not timed_out: #If it has not timed out, we want it to hover for the rest of the time
+                    if state is not None:
+                        actions, _, state, _ = model.step(obs)
+                    else:
+                        actions, _, _, _ = model.step(obs)
+
+                    obs, rew, done, info = env.step(actions.numpy())
+
+                    if status == 'timeout':
+                        timed_out = True
+                        print('Done hovering')
+                
+
+                env.compare_trajectory_with_optimal()
+                
+                new_goal = True
+                obs = env.reset()
                 obs = np.array([obs])
 
     env.close()

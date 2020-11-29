@@ -15,7 +15,13 @@ from std_msgs.msg import Float64MultiArray
 from gym import core, spaces
 from gym.utils import seeding
 
+#Results
+from math import sqrt
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 PCL_FEATURE_SIZE = 1440
+
 
 class RotorsWrappers:
     def __init__(self):
@@ -46,6 +52,8 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
+        self.record_traj = False
+
         self.robot_odom = collections.deque([]) 
         self.msg_cnt = 0
         self.pcl_feature = np.array([])
@@ -54,10 +62,15 @@ class RotorsWrappers:
 
         self.seed()
 
+        self.shortest_dist_line = []
+        self.robot_trajectory = np.array([0,0,0])
+
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
         self.pcl_feature_subscriber = rospy.Subscriber('/lidar_depth_feature', Float64MultiArray, self.pcl_feature_callback)
+
+
 
         self.goal_training_publisher = rospy.Publisher("/delta/goal_training", Pose)
         self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
@@ -78,7 +91,7 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.2)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -89,7 +102,7 @@ class RotorsWrappers:
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
-        self.R_action = rospy.get_param('R_action', [0.005, 0.005, 0.005])
+        self.R_action = rospy.get_param('R_action', [0.0015, 0.0015, 0.0015])
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
@@ -102,6 +115,8 @@ class RotorsWrappers:
         self.max_acc_z = rospy.get_param('max_acc_z', 1.0)
 
         self.control_rate = rospy.get_param('control_rate', 20.0)
+
+
 
     def step(self, action):
         command = RateThrust()
@@ -124,6 +139,7 @@ class RotorsWrappers:
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
         Qx = self.Q_state.dot(new_obs[0:6])
         xT_Qx = new_obs[0:6].transpose().dot(Qx) / 250.0
+
         Ru = self.R_action.dot(action)
         uT_Ru = action.transpose().dot(Ru) / 250.0
         reward = - uT_Ru
@@ -133,9 +149,9 @@ class RotorsWrappers:
         self.done = False        
         
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.2):
-            reward = reward + self.goal_reward -xT_Qx
-            self.done = False
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
+            reward = reward + self.goal_reward# -xT_Qx
+            self.done = True
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
@@ -155,6 +171,13 @@ class RotorsWrappers:
             self.done = True
             print('timeout')
             info = {'status':'timeout'}
+
+        if self.record_traj:
+            robot_odom = self.robot_odom[0]        
+            robot_position = np.array([robot_odom.pose.pose.position.x, robot_odom.pose.pose.position.y, robot_odom.pose.pose.position.z])
+            self.robot_trajectory = np.vstack([self.robot_trajectory, robot_position])
+            if self.done:
+                self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)
 
         return (new_obs, reward, self.done, info)
 
@@ -323,11 +346,13 @@ class RotorsWrappers:
         goal.orientation.y = 0
         goal.orientation.z = 0
         goal.orientation.w = 1
+
         # Convert this goal into the world frame and set it as the current goal
         robot_odom = Odometry()
         robot_odom.pose.pose = robot_pose
         current_goal = self.transform_goal_to_world_frame(robot_odom, goal)
 
+        self.get_goal_coordinates(current_goal.position)
         return current_goal, r
 
     def draw_new_goal(self, p):
@@ -410,6 +435,10 @@ class RotorsWrappers:
         self.goal_training_publisher.publish(goal)
         self.reset_timer(r * 3)
 
+
+
+        self.calculate_opt_trajectory_distance(start_pose.position)
+
         obs = self.get_new_obs()
         return obs        
 
@@ -478,6 +507,94 @@ class RotorsWrappers:
         if time <= 0:
             time = 1.0
         self.timeout_timer = rospy.Timer(rospy.Duration(time), self.timer_callback)
+
+    def calculate_opt_trajectory_distance(self, robot_pos): #Eilef Both in World frame
+        num_steps = 80
+        self.shortest_dist_line = []
+        shortest_dist_x = np.linspace(robot_pos.x, self.goal_coordinates.x, num_steps)
+        shortest_dist_y = np.linspace(robot_pos.y, self.goal_coordinates.y, num_steps)
+        shortest_dist_z = np.linspace(robot_pos.z, self.goal_coordinates.z, num_steps)
+        for i in range(num_steps):
+            self.shortest_dist_line.append([shortest_dist_x[i],shortest_dist_y[i],shortest_dist_z[i]])
+
+        #print("Length of shortest line is: ", len(self.shortest_dist_line), "Shortest line is: ",self.shortest_dist_line)
+
+    def plot_trajectory(self, robo_path, closest_pair):
+        fig = plt.figure()
+        ax = fig.add_subplot(111,projection='3d')
+
+        x_robo = []
+        y_robo = []
+        z_robo = []
+        x_opt = []
+        y_opt = []
+        z_opt = []
+
+        for index, robo_coord in enumerate(robo_path):
+            x_robo.append(robo_coord[0])
+            y_robo.append(robo_coord[1]) #Plotting trajectory
+            z_robo.append(robo_coord[2])
+            x_lines = []
+            y_lines = []
+            z_lines = []            
+            x_lines.append(robo_coord[0])
+            x_lines.append(self.shortest_dist_line[closest_pair[index]][0]) #Plotting lines between trajectory and opt path
+            y_lines.append(robo_coord[1])
+            y_lines.append(self.shortest_dist_line[closest_pair[index]][1])
+            z_lines.append(robo_coord[2])
+            z_lines.append(self.shortest_dist_line[closest_pair[index]][2])
+            plt.plot(x_lines,y_lines,z_lines, color ='green')
+
+        for num in range(len(self.shortest_dist_line)):
+            x_opt.append(self.shortest_dist_line[num][0]) #Plotting optimal path
+            y_opt.append(self.shortest_dist_line[num][1])
+            z_opt.append(self.shortest_dist_line[num][2])
+
+        ax.set_xlabel('Distance x')
+        ax.set_ylabel('Distance y')
+        ax.set_zlabel('Distance z')
+
+        ax.scatter(x_robo, y_robo,z_robo)
+        ax.scatter(x_opt, y_opt,z_opt)
+        ax.scatter(self.goal_coordinates.x,self.goal_coordinates.y,self.goal_coordinates.z)
+
+        #plt.plot(x_lines,y_lines,z_lines, color ='green')
+        plt.show()
+
+    def compare_trajectory_with_optimal(self): #Robot frame
+
+        robot_path = self.robot_trajectory
+        length = [0]*len(robot_path)
+        closest_pair = [0]*len(robot_path)
+
+        for index, robo_coord in enumerate(robot_path):
+            shortest_length = 1000
+            for i, optimal_coord in enumerate(self.shortest_dist_line):
+                temp_length = sqrt((optimal_coord[0]-robo_coord[0])**2 + (optimal_coord[1]-robo_coord[1])**2 + (optimal_coord[2]-robo_coord[2])**2)
+                if temp_length < shortest_length:
+                    shortest_length = temp_length
+
+                    closest_pair[index] = i
+                    length[index] = shortest_length
+
+        RMS = self.calculate_rms(length)
+        print("RMS verdien er så mye som: ", RMS)
+        self.plot_trajectory(robot_path, closest_pair)
+        
+        self.robot_trajectory = np.empty(3) #Delete trajectory after? Or just export
+        
+    def calculate_rms(self, length):
+        total_length_squared = 0
+        for i in range(len(length)):
+            total_length_squared = length[i]**2 + total_length_squared
+        
+        RMS = sqrt(total_length_squared/len(length))
+        return RMS
+                
+
+    def get_goal_coordinates(self, position): #Eilef, goal coordinates in world frame
+        self.goal_coordinates = position
+        
 
     def render(self):
         return None
