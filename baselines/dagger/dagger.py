@@ -18,8 +18,8 @@ import gym_arc
 batch_size = 32
 steps = 2048    
 nb_training_epoch = 50
-dagger_itr = 15 #200
-visualization = True
+dagger_itr = 20
+visualization = False
 
 class bcolors:
         HEADER = '\033[95m'
@@ -49,9 +49,7 @@ def build_actor_model(input_shape, output_shape):
         h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                 name='mlp_fc2', activation=tf.tanh)(h)
         h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
-                                name='output', activation=tf.keras.activations.tanh)(h)
-        #h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
-        #                           name='output')(h)
+                                name='output', activation=None)(h)
 
         model = tf.keras.Model(inputs=[x_input], outputs=[h])
 
@@ -118,7 +116,7 @@ if __name__ == '__main__':
 
     if play:
         obs = env.reset()
-        scaled_obs = obs / env.observation_space.high
+        scaled_obs = obs / env.observation_space.high # WARNING: pos_high is np.inf now!!!
         reward_sum = 0.0
         itr = 0
         while True:
@@ -130,10 +128,11 @@ if __name__ == '__main__':
                 #stop = timeit.default_timer()
                 #print('Time for actor prediction: ', stop - start)
 
-                action = tf.clip_by_value(action, -1.0, 1.0) # output from actor NN will actually be in the range (-1, 1)
+                #action = tf.clip_by_value(action, -1.0, 1.0) # output from actor NN will actually be in the range (-1, 1)
+                action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
                 action = action.numpy()
                 
-                obs, reward, done, info = env.step(action[0] * env.action_space.high) # scale actor NN output to actual scale
+                obs, reward, done, info = env.step(action[0])
                 scaled_obs = obs / env.observation_space.high
                 reward_sum += reward
 
@@ -166,7 +165,7 @@ if __name__ == '__main__':
         for i in range(steps):
             expert_action = env.get_controller_result()
             obs_list.append(obs)
-            action_list.append(env.encode_control(expert_action) / env.action_space.high)
+            action_list.append(env.encode_control(expert_action))
             
             obs, reward, done, info = env.step(expert_action)
             
@@ -204,10 +203,11 @@ if __name__ == '__main__':
                 #print('obs:', obs)
                 expert_action = env.get_controller_result()
                 obs_list.append(obs)
-                action_list.append(env.encode_control(expert_action) / env.action_space.high )
+                action_list.append(env.encode_control(expert_action) )
                 
                 #start = timeit.default_timer()
                 action = actor(np.reshape(obs, [1,nb_obs]), training=False)  # assume symmetric action space (low = -high)
+                action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
                 #stop = timeit.default_timer()
                 #print('Time for actor prediction: ', stop - start)        
                 #print('action:', action) # action = [[.]]
@@ -215,7 +215,7 @@ if __name__ == '__main__':
                 action = tf.clip_by_value(action, -1.0, 1.0)
                 #action = action.eval(session=tf.compat.v1.Session())
                 action = action.numpy()
-                new_obs, reward, done, _ = env.step(action[0] * env.action_space.high)
+                new_obs, reward, done, _ = env.step(action[0])
                 new_obs_scaled = new_obs / env.observation_space.high
                 scaled_obs = new_obs_scaled
                 obs = new_obs
@@ -254,4 +254,4 @@ if __name__ == '__main__':
         if (save_path != None):
             #actor.save('dagger_actor_pcl', include_optimizer=False) # should we include optimizer?
             print('save weights to file:', save_path)
-            actor.save_weights(save_path + '/dagger_pcl.h5')
+            actor.save_weights(save_path + '/dagger_ARC_actor.h5')
