@@ -10,6 +10,8 @@ The actor network weights are automatically saved in the same folder as dagger.p
 python dagger.py --save_path=path_to_save
 ```
 
+For visualization on RViz during imitating, set `visualization = True` in `dagger.py`
+
 To play the dagger actor:
 
 ```
