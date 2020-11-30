@@ -11,3 +11,13 @@ To run with ARC model
 
 - `python3 -m baselines.run --alg=ppo2 --env=ARC-v0 --num_timesteps=1e7 --num_env=5 --save_path=path_to_save`
 - `python3 -m baselines.run --alg=ppo2 --env=ARC-v0 --num_timesteps=0 --num_env=1 --play --load_path=path_to_load`
+
+# TODO:
+ 
+When `--play`, change this line of code [code] (https://github.com/unr-arl/baselines/blob/2f0405364d7d3e6476e1548eaaa8424dc1c24541/baselines/common/policies.py#L52) to
+
+```
+self.action = self.pi
+```
+
+to remove variance from running policy.
