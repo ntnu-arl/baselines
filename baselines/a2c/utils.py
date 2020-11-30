@@ -2,6 +2,11 @@ import os
 import numpy as np
 import tensorflow as tf
 from collections import deque
+from baselines.dagger.dagger import build_actor_model
+import gym
+import gym_arc
+
+DAGGER_ACTOR_WEIGHT = '/home/huan/ARC_RL/baseline_ws/src/baselines_ros/src/baselines/baselines/dagger/dagger_actor_weight.h5'
 
 def sample(logits):
     noise = tf.random_uniform(tf.shape(logits))
@@ -57,10 +62,43 @@ def conv(x, scope, *, nf, rf, stride, pad='VALID', init_scale=1.0, data_format='
 
 def fc(x, scope, nh, *, init_scale=1.0, init_bias=0.0):
     with tf.variable_scope(scope):
+        # ADD CODE TO LOAD WEIGHTS FROM DAGGER MODEL
+        env = gym.make('ARC-v0')
+        nb_actions = env.action_space.shape[-1]
+        nb_obs = env.observation_space.shape[-1]
+        dagger_model = build_actor_model(nb_obs, nb_actions)
+        #dagger_model.summary()
+        dagger_model.load_weights(DAGGER_ACTOR_WEIGHT)
+        
         nin = x.get_shape()[1].value
-        w = tf.get_variable("w", [nin, nh], initializer=ortho_init(init_scale))
-        b = tf.get_variable("b", [nh], initializer=tf.constant_initializer(init_bias))
-        return tf.matmul(x, w)+b
+        init_w = np.array([])
+        init_b = np.array([])
+        if (scope == 'mlp_fc0'):
+            print('\033[93m' + 'init layer:', scope, '\033[0m')
+            layer_weight = dagger_model.get_layer('mlp_fc1').get_weights()
+            init_w = layer_weight[0]
+            init_b = layer_weight[1]
+            # print('\033[93m' + 'init_w:', init_w.shape)
+            # print('\033[93m' + 'init_b:', init_b.shape)
+        elif (scope == 'mlp_fc1'):
+            print('\033[93m' + 'init layer:', scope, '\033[0m')
+            layer_weight = dagger_model.get_layer('mlp_fc2').get_weights()
+            init_w = layer_weight[0]
+            init_b = layer_weight[1]
+        elif (scope == 'pi'):
+            print('\033[93m' + 'init layer:', scope, '\033[0m')
+            layer_weight = dagger_model.get_layer('output').get_weights()
+            init_w = layer_weight[0]
+            init_b = layer_weight[1]                    
+
+        if init_w.shape[0] == 0:    
+            w = tf.get_variable("w", [nin, nh], initializer=ortho_init(init_scale))
+            b = tf.get_variable("b", [nh], initializer=tf.constant_initializer(init_bias))
+        else:
+            w = tf.get_variable("w", [nin, nh], initializer=tf.constant_initializer(init_w))
+            b = tf.get_variable("b", [nh], initializer=tf.constant_initializer(init_b))
+
+        return tf.matmul(x, w)+b       
 
 def batch_to_seq(h, nbatch, nsteps, flat=False):
     if flat:
