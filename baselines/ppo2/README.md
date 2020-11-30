@@ -12,7 +12,7 @@ To run with ARC model:
 - `python3 -m baselines.run --alg=ppo2 --env=ARC-v0 --num_timesteps=1e7 --num_env=5 --save_path=path_to_save`
 - `python3 -m baselines.run --alg=ppo2 --env=ARC-v0 --num_timesteps=0 --num_env=1 --play --load_path=path_to_load`
 
-To edit the path to weight file of dagger actor, change `DAGGER_ACTOR_WEIGHT` [variable](https://github.com/unr-arl/baselines/blob/0dc5386b284031ff788db7c6b06b4903f1a74492/baselines/a2c/utils.py#L9) in `baselines/a2c/utils.py` file 
+To edit the path to weight file of dagger actor, change `DAGGER_ACTOR_WEIGHT` [variable](https://github.com/unr-arl/baselines/blob/0dc5386b284031ff788db7c6b06b4903f1a74492/baselines/a2c/utils.py#L9) in `baselines/a2c/utils.py` file, a pretrained dagger actor (with no tanh in output layer) is provided [here](https://github.com/unr-arl/baselines/blob/arc_dev_no_tanh_output_layer/baselines/dagger/dagger_actor_weight.h5) 
 
 # TODO:
 
