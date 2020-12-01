@@ -52,7 +52,7 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
-        self.record_traj = False
+        self.record_traj = True
 
         self.robot_odom = collections.deque([]) 
         self.msg_cnt = 0
@@ -151,7 +151,7 @@ class RotorsWrappers:
         # reach goal?
         if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
             reward = reward + self.goal_reward# -xT_Qx
-            self.done = True
+            self.done = False
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
@@ -519,10 +519,10 @@ class RotorsWrappers:
 
         #print("Length of shortest line is: ", len(self.shortest_dist_line), "Shortest line is: ",self.shortest_dist_line)
 
-    def plot_trajectory(self, robo_path, closest_pair):
+    def plot_trajectory(self, robo_path, closest_pair,RMS):
         fig = plt.figure()
         ax = fig.add_subplot(111,projection='3d')
-
+        
         x_robo = []
         y_robo = []
         z_robo = []
@@ -557,8 +557,32 @@ class RotorsWrappers:
         ax.scatter(x_robo, y_robo,z_robo)
         ax.scatter(x_opt, y_opt,z_opt)
         ax.scatter(self.goal_coordinates.x,self.goal_coordinates.y,self.goal_coordinates.z)
+        ax.set_title(f'Quadcopter trajectory vs optimal straight trajectory with RMS: {RMS:.4f}')
 
         #plt.plot(x_lines,y_lines,z_lines, color ='green')
+        plt.show()
+
+    def xyz_response(self):
+        fig,ax = plt.subplots(3,1,clear=True)
+        
+        #Plot x-x_ref
+        ax[0].plot(self.robot_trajectory[:,0])
+        ax[0].axhline(y=self.goal_coordinates.x, xmin=0, xmax=1,color='r',linestyle='--')
+        ax[0].set_ylabel("x-position")
+        ax[0].set_xlabel("Time")
+
+        #Plot y-y_ref
+        ax[1].plot(self.robot_trajectory[:,1])
+        ax[1].axhline(y=self.goal_coordinates.y, xmin=0, xmax=1,color = 'r',linestyle='--')
+        ax[1].set_ylabel("y-position")
+        ax[1].set_xlabel("Time")
+
+        #Plot z-z_ref
+        ax[2].plot(self.robot_trajectory[:,2])
+        ax[2].axhline(y=self.goal_coordinates.z, xmin=0, xmax=1,color='r',linestyle='--')
+        ax[2].set_ylabel("z-position")
+        ax[2].set_xlabel("Time")
+        fig.suptitle("Quadcopter coordinates vs goal coordinates")
         plt.show()
 
     def compare_trajectory_with_optimal(self): #Robot frame
@@ -579,7 +603,7 @@ class RotorsWrappers:
 
         RMS = self.calculate_rms(length)
         print("RMS verdien er så mye som: ", RMS)
-        self.plot_trajectory(robot_path, closest_pair)
+        self.plot_trajectory(robot_path, closest_pair,RMS)
         
         self.robot_trajectory = np.empty(3) #Delete trajectory after? Or just export
         

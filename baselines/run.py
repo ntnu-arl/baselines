@@ -260,7 +260,7 @@ def main(args):
             else:
                 actions, _, _, _ = model.step(obs)
 
-            obs, rew, done, _ = env.step(actions.numpy())
+            obs, rew, done, info = env.step(actions.numpy())
 
             reach_goal_trajectory = np.concatenate((reach_goal_trajectory, obs[0:3]))
             reach_goal_trajectory_list.append(obs[0:3])
@@ -298,8 +298,10 @@ def main(args):
                         timed_out = True
                         print('Done hovering')
                 
-
+                env.xyz_response()
                 env.compare_trajectory_with_optimal()
+
+
                 
                 new_goal = True
                 obs = env.reset()
