@@ -3,8 +3,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
-#from baselines.a2c.utils import ortho_init
-#from baselines.dagger.buffer import Buffer
 import tensorflow_docs as tfdocs
 import tensorflow_docs.plots
 import tensorflow_docs.modeling
@@ -15,11 +13,14 @@ from collections import deque
 import gym
 import gym_arc
 
+visualization = False
+normalize_input = False
+use_tanh_output = True
+
 batch_size = 32
 steps = 2048    
 nb_training_epoch = 50
-dagger_itr = 20
-visualization = False
+dagger_itr = 15 
 
 class bcolors:
         HEADER = '\033[95m'
@@ -65,8 +66,12 @@ def build_actor_model(input_shape, output_shape):
                                 name='mlp_fc1', activation=tf.tanh)(h)
         h = tf.keras.layers.Dense(units=64, kernel_initializer=ortho_init(np.sqrt(2)),
                                 name='mlp_fc2', activation=tf.tanh)(h)
-        h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
-                                name='output', activation=None)(h)
+        if (use_tanh_output): 
+            h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
+                                    name='output', activation=tf.tanh)(h)            
+        else: # linear output (no activation fcn at output layer)                          
+            h = tf.keras.layers.Dense(units=output_shape, kernel_initializer=tf.random_uniform_initializer(minval=-3e-3, maxval=3e-3),
+                                    name='output', activation=None)(h)
 
         model = tf.keras.Model(inputs=[x_input], outputs=[h])
 
@@ -139,13 +144,17 @@ if __name__ == '__main__':
         while True:
             for i in range(steps):
                 #print('obs:', obs)
-                robot_state = np.reshape(obs, [1, nb_obs])
+                if normalize_input:
+                    robot_state = np.reshape(scaled_obs, [1, nb_obs])
+                else:    
+                    robot_state = np.reshape(obs, [1, nb_obs])
                 #start = timeit.default_timer()
                 action = actor(robot_state, training=False)  # assume symmetric action space (low = -high)
                 #stop = timeit.default_timer()
                 #print('Time for actor prediction: ', stop - start)
 
-                #action = tf.clip_by_value(action, -1.0, 1.0) # output from actor NN will actually be in the range (-1, 1)
+                if use_tanh_output:
+                    action = action * env.action_space.high
                 action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
                 action = action.numpy()
                 
@@ -181,10 +190,18 @@ if __name__ == '__main__':
         print('Collecting data...')
         for i in range(steps):
             expert_action = env.get_controller_result()
-            obs_list.append(obs)
-            action_list.append(env.encode_control(expert_action))
+            if normalize_input:
+                obs_list.append(scaled_obs)
+            else:    
+                obs_list.append(obs)
+            expert_action_encode = env.encode_control(expert_action)
+            if use_tanh_output:
+                expert_action_encode = tf.clip_by_value(expert_action_encode, env.action_space.low, env.action_space.high)
+                action_list.append(expert_action_encode / env.action_space.high)
+            else:    
+                action_list.append(expert_action_encode)
             
-            obs, reward, done, info = env.step(expert_action)
+            obs, reward, done, info = env.step(expert_action_encode)
             
             scaled_obs = obs / env.observation_space.high
             reward_list.append(np.array([reward]))
@@ -219,19 +236,34 @@ if __name__ == '__main__':
             for i in range(steps):
                 #print('obs:', obs)
                 expert_action = env.get_controller_result()
-                obs_list.append(obs)
-                action_list.append(env.encode_control(expert_action) )
+                if normalize_input:
+                    obs_list.append(scaled_obs)
+                else:
+                    obs_list.append(obs)
+                expert_action_encode = env.encode_control(expert_action)
+                if use_tanh_output:
+                    expert_action_encode = tf.clip_by_value(expert_action_encode, env.action_space.low, env.action_space.high)
+                    action_list.append(expert_action_encode / env.action_space.high)
+                else:    
+                    action_list.append(expert_action_encode)
                 
                 #start = timeit.default_timer()
-                action = actor(np.reshape(obs, [1,nb_obs]), training=False)  # assume symmetric action space (low = -high)
+                if normalize_input:
+                    robot_state = np.reshape(scaled_obs, [1, nb_obs])
+                else:    
+                    robot_state = np.reshape(obs, [1, nb_obs])
+                action = actor(robot_state, training=False)  # assume symmetric action space (low = -high)
+                if use_tanh_output:
+                    action = action * env.action_space.high
                 action = tf.clip_by_value(action, env.action_space.low, env.action_space.high)
                 #stop = timeit.default_timer()
                 #print('Time for actor prediction: ', stop - start)        
                 #print('action:', action) # action = [[.]]
                 
-                action = tf.clip_by_value(action, -1.0, 1.0)
+                #action = tf.clip_by_value(action, -1.0, 1.0)
                 #action = action.eval(session=tf.compat.v1.Session())
                 action = action.numpy()
+                #print('action[0]', action[0])
                 new_obs, reward, done, _ = env.step(action[0])
                 new_obs_scaled = new_obs / env.observation_space.high
                 scaled_obs = new_obs_scaled
@@ -259,6 +291,9 @@ if __name__ == '__main__':
             for obs, act in zip(obs_list, action_list):
                 obs_all = np.concatenate([obs_all, np.reshape(obs, [1,nb_obs])], axis=0)
                 actions_all = np.concatenate([actions_all, np.reshape(act, [1,nb_actions])], axis=0)
+
+            # print('save weights')
+            # actor.save_weights('dagger_actor_weight_itr' + str(itr) + '.h5') 
 
             # train actor
             actor.fit(obs_all, actions_all,
