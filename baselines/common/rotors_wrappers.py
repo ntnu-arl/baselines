@@ -52,7 +52,7 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
-        self.record_traj = True
+        self.record_traj = False
 
         self.robot_odom = collections.deque([]) 
         self.msg_cnt = 0
