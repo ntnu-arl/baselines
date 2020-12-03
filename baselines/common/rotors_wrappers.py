@@ -585,7 +585,7 @@ class RotorsWrappers:
         fig.suptitle("Quadcopter coordinates vs goal coordinates")
         plt.show()
 
-    def compare_trajectory_with_optimal(self): #Robot frame
+    def compare_trajectory_with_optimal(self,vizualize): #Robot frame
 
         robot_path = self.robot_trajectory
         length = [0]*len(robot_path)
@@ -603,9 +603,12 @@ class RotorsWrappers:
 
         RMS = self.calculate_rms(length)
         print("RMS verdien er så mye som: ", RMS)
-        self.plot_trajectory(robot_path, closest_pair,RMS)
+        if vizualize:
+            self.plot_trajectory(robot_path, closest_pair,RMS)
         
         self.robot_trajectory = np.empty(3) #Delete trajectory after? Or just export
+
+        return RMS,self.current_goal
         
     def calculate_rms(self, length):
         total_length_squared = 0

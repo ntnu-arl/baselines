@@ -249,6 +249,13 @@ def main(args):
         #episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
         #episode_rew_queue = deque(maxlen=10)
         #queue_cnt = 0
+        ARMS = np.array([])
+        Goals = np.array([])
+        num_sims = 10
+        sim_done = False
+        sim_ctr = 0
+        #for _ in range(num_sims):
+        #while not sim_done:
         while True:
 
             if new_goal:
@@ -273,6 +280,9 @@ def main(args):
             status = info.get('status')
 
             if done_any:
+                sim_ctr = sim_ctr + 1 
+                if sim_ctr ==num_sims:
+                    sim_done = True
                 #for i in np.nonzero(done)[0]:
                 #    episode_rew_queue.appendleft(episode_rew[i])
                 #    episode_rew[i] = 0
@@ -298,14 +308,19 @@ def main(args):
                         timed_out = True
                         print('Done hovering')
                 
-                env.xyz_response()
-                env.compare_trajectory_with_optimal()
-
-
+                #env.xyz_response()
+                RMS,goal = env.compare_trajectory_with_optimal(False)
+                ARMS.append(RMS)
+                Goals.append(goal)
                 
                 new_goal = True
                 obs = env.reset()
                 obs = np.array([obs])
+        print(f'ARMS is: {np.mean(ARMS)}')
+        print("The goals are:")
+        for i in range(num_sims):
+            print(Goals[i])
+
 
     env.close()
 
