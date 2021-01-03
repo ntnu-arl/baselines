@@ -53,7 +53,7 @@ _game_envs['retro'] = {
 _game_envs['custom'] = {
     'gym_arc'
 }
-def train(args, extra_args):
+def train(args, play_arg=False, extra_args=None):
     env_type, env_id = get_env_type(args)
     print('env_type: {}'.format(env_type))
 
@@ -80,6 +80,7 @@ def train(args, extra_args):
         env=env,
         seed=seed,
         total_timesteps=total_timesteps,
+        play_arg=play_arg,
         **alg_kwargs
     )
 
@@ -216,7 +217,8 @@ def main(args):
         rank = MPI.COMM_WORLD.Get_rank()
         configure_logger(args.log_path, format_strs=[])
 
-    model, env = train(args, extra_args)
+    logger.log("Model play argument", args.play)
+    model, env = train(args, args.play, extra_args)
 
     if args.save_path is not None and rank == 0:
         save_path = osp.expanduser(args.save_path)

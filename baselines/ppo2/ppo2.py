@@ -21,7 +21,7 @@ def constfn(val):
 def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2048, ent_coef=0.0, lr=3e-4,
             vf_coef=0.5,  max_grad_norm=0.5, gamma=0.99, lam=0.95,
             log_interval=10, nminibatches=4, noptepochs=4, cliprange=0.2,
-            save_interval=0, load_path=None, model_fn=None, update_fn=None, init_fn=None, mpi_rank_weight=1, comm=None, **network_kwargs):
+            save_interval=0, load_path=None, model_fn=None, update_fn=None, init_fn=None, mpi_rank_weight=1, comm=None, play_arg=False, **network_kwargs):
     '''
     Learn policy using PPO algorithm (https://arxiv.org/abs/1707.06347)
 
@@ -85,7 +85,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     else: assert callable(cliprange)
     total_timesteps = int(total_timesteps)
 
-    policy = build_policy(env, network, **network_kwargs)
+    logger.log("Play arg in ppo2", play_arg)
+
+    policy = build_policy(env=env, policy_network=network,  play_arg=play_arg, **network_kwargs)
 
     # Get the nb of env
     nenvs = env.num_envs
@@ -203,8 +205,10 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             logger.logkv("misc/explained_variance", float(ev))
             eprewmean = safemean([epinfo['r'] for epinfo in epinfobuf])
             logger.logkv('eprewmean', eprewmean)
-            writer.add_scalar('Episode return mean', eprewmean, update*nbatch)
-            logger.logkv('eplenmean', safemean([epinfo['l'] for epinfo in epinfobuf]))
+            writer.add_scalar('Episode reward mean', eprewmean, update*nbatch)
+            eplenmean = safemean([epinfo['l'] for epinfo in epinfobuf])
+            logger.logkv('eplenmean', eplenmean)
+            writer.add_scalar('Episode length mean', eplenmean, update*nbatch)
             if eval_env is not None:
                 logger.logkv('eval_eprewmean', safemean([epinfo['r'] for epinfo in eval_epinfobuf]) )
                 logger.logkv('eval_eplenmean', safemean([epinfo['l'] for epinfo in eval_epinfobuf]) )
