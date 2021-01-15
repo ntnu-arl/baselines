@@ -46,7 +46,7 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
-        self.robot_odom = collections.deque([]) 
+        self.robot_odom = collections.deque([])
         self.msg_cnt = 0
         self.pcl_feature = np.array([])
 
@@ -69,7 +69,7 @@ class RotorsWrappers:
                                                  queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-        self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)        
+        self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -93,7 +93,7 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 1.0)
+        self.goal_reward = rospy.get_param('goal_reward', 50.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
         self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
 
@@ -130,8 +130,8 @@ class RotorsWrappers:
         #reward = -0.01
 
         info = {'status':'none'}
-        self.done = False        
-        
+        self.done = False
+
         # reach goal?
         if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
             reward = reward + self.goal_reward
@@ -139,7 +139,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx    
+            reward = reward - xT_Qx
             pass
 
         # collide?
@@ -147,7 +147,7 @@ class RotorsWrappers:
             self.collide = False
             reward = reward - self.obstacle_max_penalty
             self.done = True
-            info = {'status':'collide'}        
+            info = {'status':'collide'}
 
         # time out?
         if self.timeout:
@@ -209,10 +209,10 @@ class RotorsWrappers:
     # Return:   current_goal  : Pose(), in world frame
     def transform_goal_to_world_frame(self, robot_odom, goal):
         current_goal = Pose()
-        
+
         r_goal = R.from_quat([goal.orientation.x, goal.orientation.y, goal.orientation.z, goal.orientation.w])
         goal_euler_angles = r_goal.as_euler('zyx', degrees=False)
-        
+
         robot_pose = robot_odom.pose.pose
         r_robot = R.from_quat([robot_pose.orientation.x, robot_pose.orientation.y, robot_pose.orientation.z, robot_pose.orientation.w])
         robot_euler_angles = r_robot.as_euler('zyx', degrees=False)
@@ -244,10 +244,10 @@ class RotorsWrappers:
     #           robot_euler_angles: np.array(), zyx order
     def transform_goal_to_vehicle_frame(self, robot_odom, goal):
         goal_odom = Odometry()
-        
+
         r_goal = R.from_quat([goal.orientation.x, goal.orientation.y, goal.orientation.z, goal.orientation.w])
         goal_euler_angles = r_goal.as_euler('zyx', degrees=False)
-        
+
         robot_pose = robot_odom.pose.pose
         r_robot = R.from_quat([robot_pose.orientation.x, robot_pose.orientation.y, robot_pose.orientation.z, robot_pose.orientation.w])
         robot_euler_angles = r_robot.as_euler('zyx', degrees=False)
@@ -391,7 +391,7 @@ class RotorsWrappers:
             start_pose, collide = self.spawn_robot(None)
 
         #rospy.loginfo('New start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
-        
+
         # check if the end position collides with env: fix it, so stupid!
         goal, r = self.generate_new_goal(start_pose)
         _, collide = self.spawn_robot(goal)
@@ -399,7 +399,7 @@ class RotorsWrappers:
             #rospy.loginfo('INVALID end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
             goal, r = self.generate_new_goal(start_pose)
             _, collide = self.spawn_robot(goal)
-        
+
         #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
 
         # put the robot at the start pose
@@ -411,7 +411,7 @@ class RotorsWrappers:
         self.reset_timer(r * 3)
 
         obs = self.get_new_obs()
-        return obs        
+        return obs
 
     # Input:    position  : Pose()
     # Return:   position  : Pose(), in world frame
@@ -423,7 +423,7 @@ class RotorsWrappers:
         new_position = ModelState()
         new_position.model_name = 'delta'
         new_position.reference_frame = 'world'
-        
+
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
@@ -438,7 +438,7 @@ class RotorsWrappers:
             new_position.pose.orientation.z = 0
             new_position.pose.orientation.w = 1
         else:
-            new_position.pose = pose    
+            new_position.pose = pose
         # Fill in the new twist of the robot
         new_position.twist.linear.x = 0
         new_position.twist.linear.y = 0
@@ -467,7 +467,7 @@ class RotorsWrappers:
         rospy.sleep(0.1) # wait for robot to get new odometry
         while (len(self.robot_odom) == 0):
             rospy.sleep(0.001)
-            pass        
+            pass
         return new_position.pose, self.collide
 
     def reset_timer(self, time):
