@@ -84,7 +84,7 @@ def train(args, extra_args):
         alg_kwargs['load_actor_dagger_path'] = args.load_actor_dagger_path
 
     if args.load_critic_dagger_path:
-        alg_kwargs['load_critic_dagger_path'] = args.load_critic_dagger_path        
+        alg_kwargs['load_critic_dagger_path'] = args.load_critic_dagger_path
 
     model = learn(
         env=env,
@@ -219,6 +219,7 @@ def main(args):
     arg_parser = common_arg_parser()
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
+    analyze_plots = True
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -243,28 +244,62 @@ def main(args):
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
 
+        new_goal = True
+        reach_goal_trajectory_list = []
+
         episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
         episode_rew_queue = deque(maxlen=10)
         queue_cnt = 0
+
+        ARMS = np.array([])
+        Goals = np.array([])
+        num_sims = 10
+        sim_done = False
+        sim_ctr = 0
+
         while True:
+            if new_goal:
+                reach_goal_trajectory = np.array([])
+                new_goal = False
+
             if state is not None:
                 actions, _, state, _ = model.step(obs)
             else:
                 actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions.numpy())
+
+            reach_goal_trajectory = np.concatenate((reach_goal_trajectory, obs[0:3]))
+            reach_goal_trajectory_list.append(obs[0:3])
+
             if not isinstance(env, VecEnv):
                 obs = np.expand_dims(np.array(obs), axis=0)
             episode_rew += rew
             #env.render()
             done_any = done.any() if isinstance(done, np.ndarray) else done
+
             if done_any:
                 for i in np.nonzero(done)[0]:
                     episode_rew_queue.appendleft(episode_rew[i])
                     episode_rew[i] = 0
                     print('episode_rew mean={}'.format(np.mean(episode_rew_queue)))
-                obs = env.reset()    
+
+                if analyze_plots == True:
+                    env.pause()
+                    RMS, goal = env.compare_trajectory_with_optimal(analyze_plots)
+                    env.unpause()
+                    #ARMS.append(RMS)
+                    #Goals.append(goal)
+
+                new_goal = True
+                obs = env.reset()
                 obs = np.array([obs])
+
+
+        print(f'ARMS is: {np.mean(ARMS)}')
+        print("The goals are:")
+        for i in range(num_sims):
+            print(Goals[i])
 
     env.close()
 
