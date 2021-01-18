@@ -219,7 +219,7 @@ def main(args):
     arg_parser = common_arg_parser()
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
-    analyze_plots = True
+    analyze_plots = False
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -251,11 +251,11 @@ def main(args):
         episode_rew_queue = deque(maxlen=10)
         queue_cnt = 0
 
-        ARMS = np.array([])
-        Goals = np.array([])
-        num_sims = 10
-        sim_done = False
-        sim_ctr = 0
+        avrg_RMS = np.array([])
+        all_goals = np.array([])
+        #num_sims = 10
+        #sim_done = False
+        #sim_ctr = 0
 
         while True:
             if new_goal:
@@ -284,22 +284,27 @@ def main(args):
                     episode_rew[i] = 0
                     print('episode_rew mean={}'.format(np.mean(episode_rew_queue)))
 
+                #Plots
                 if analyze_plots == True:
                     env.pause()
+
+                    env.xyz_response()
                     RMS, goal = env.compare_trajectory_with_optimal(analyze_plots)
+                    avrg_RMS = np.append(avrg_RMS, RMS)
+                    all_goals = np.append(all_goals, goal)
+
                     env.unpause()
-                    #ARMS.append(RMS)
-                    #Goals.append(goal)
+
 
                 new_goal = True
                 obs = env.reset()
                 obs = np.array([obs])
 
 
-        print(f'ARMS is: {np.mean(ARMS)}')
-        print("The goals are:")
-        for i in range(num_sims):
-            print(Goals[i])
+        #print(f'Avrg RMS is: {np.mean(avrg_RMS)}')
+        #print("The goals are:")
+        #for i in range(num_sims):
+        #    print(all_goals[i])
 
     env.close()
 
