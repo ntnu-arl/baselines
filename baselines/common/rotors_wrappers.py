@@ -74,7 +74,7 @@ class RotorsWrappers:
         self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
         self.goal_init_publisher = rospy.Publisher("/delta/goal", Pose)
         self.cmd_publisher = rospy.Publisher("/delta/command/rate_thrust", RateThrust)
-        self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=1)
+        self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=50)
         self.sphere_marker_pub = rospy.Publisher('goal_published',
                                                  MarkerArray,
                                                  queue_size=1)
@@ -89,7 +89,7 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.17)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.2)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -173,7 +173,7 @@ class RotorsWrappers:
             robot_position = np.array([robot_odom.pose.pose.position.x, robot_odom.pose.pose.position.y, robot_odom.pose.pose.position.z])
             self.robot_trajectory = np.vstack([self.robot_trajectory, robot_position])
             if self.done:
-                self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)
+                self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)      
 
         return (new_obs, reward, self.done, info)
 
@@ -451,10 +451,10 @@ class RotorsWrappers:
             # randomize initial position (TODO: angle?, velocity?)
             state_high = np.array([0.0, 0.0, 10.0], dtype=np.float32)
             state_low = np.array([0.0, 0.0, 8.0], dtype=np.float32)
-            state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
-            new_position.pose.position.x = state_init[0]
-            new_position.pose.position.y = state_init[1]
-            new_position.pose.position.z = state_init[2]
+            new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
+            new_position.pose.position.x = new_state[0]
+            new_position.pose.position.y = new_state[1]
+            new_position.pose.position.z = new_state[2]
             new_position.pose.orientation.x = 0
             new_position.pose.orientation.y = 0
             new_position.pose.orientation.z = 0
@@ -499,8 +499,35 @@ class RotorsWrappers:
         # self.timeout_timer = rospy.Timer(rospy.Duration(self.goal_generation_radius * 5), self.timer_callback)
         if time <= 0:
             time = 1.0
-        self.timeout_timer = rospy.Timer(rospy.Duration(time), self.timer_callback)
+        self.timeout_timer = rospy.Timer(rospy.Duration(time), self.timer_callback)   
 
+    def change_environment(self):
+        self.pause_physics_proxy(EmptyRequest()) 
+        number_of_stat_objects = 50
+
+        for i in range(number_of_stat_objects):  
+            new_position = ModelState()
+            new_position.model_name = 'easySimple Stone' + str(i)
+            new_position.reference_frame = 'world'
+
+            # randomize initial position 
+            state_high = np.array([10.0, 10.0, 0], dtype=np.float32)
+            state_low = np.array([-10.0, -10.0, 0], dtype=np.float32)
+            state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
+            new_position.pose.position.x, x2 = state_init[0], state_init[0]
+            new_position.pose.position.y, y2 = state_init[1], state_init[1]
+            new_position.pose.position.z, z2 = state_init[2], state_init[2]
+            new_position.pose.orientation.x = 0
+            new_position.pose.orientation.y = 0
+            new_position.pose.orientation.z = 0
+            new_position.pose.orientation.w = 1
+            
+            self.model_state_publisher.publish(new_position)
+            time.sleep(0.03) # since there is no ros wall rate option i python... (need time between diff pub)
+
+        self.unpause_physics_proxy(EmptyRequest())
+
+    
     def xyz_response(self):
         fig,ax = plt.subplots(3,1,clear=True)
 
