@@ -14,6 +14,7 @@ from visualization_msgs.msg import MarkerArray
 from std_msgs.msg import Float64MultiArray
 from gym import core, spaces
 from gym.utils import seeding
+from baselines.common.lidar_feature_ext import LidarFeatureExtract
 
 from math import sqrt
 import matplotlib
@@ -125,6 +126,9 @@ class RotorsWrappers:
         command.thrust.y = action[0][1]
         command.thrust.z = action[0][2]
         self.cmd_publisher.publish(command)
+
+        test_x = LidarFeatureExtract()
+        #test_x.print_data(
 
         # ros sleep 50ms
         self.sleep_rate.sleep()
