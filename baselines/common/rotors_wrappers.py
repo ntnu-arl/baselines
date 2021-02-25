@@ -88,16 +88,16 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.2)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [0.9, 0.9, 1.5, 0.03, 0.03, 0.05])
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05])
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
@@ -127,7 +127,7 @@ class RotorsWrappers:
         command.thrust.z = action[0][2]
         self.cmd_publisher.publish(command)
 
-        test_x = LidarFeatureExtract()
+        #test_x = LidarFeatureExtract()
         #test_x.print_data(
 
         # ros sleep 50ms
