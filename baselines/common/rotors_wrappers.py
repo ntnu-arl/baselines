@@ -52,7 +52,7 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
-        self.record_traj = False
+        self.record_traj = True
 
         self.robot_odom = collections.deque([])
         self.msg_cnt = 0
@@ -96,7 +96,7 @@ class RotorsWrappers:
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [0.9, 0.9, 1.5, 0.03, 0.03, 0.05])
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05])
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
@@ -577,7 +577,7 @@ class RotorsWrappers:
         ax.scatter(x_robo, y_robo, z_robo, c="blue")
         ax.scatter(x_opt, y_opt, z_opt, c="red")
         ax.scatter(self.goal_coordinates.x, self.goal_coordinates.y, self.goal_coordinates.z)
-        ax.set_title(f'MAV trajectory vs. optimal line trajectory \n RMS: {RMS:.4f}')
+        ax.set_title(f'RMF trajectory (blue) vs. optimal line trajectory (red) \n RMS: {RMS:.4f}')
 
         #plt.plot(x_lines,y_lines,z_lines, color ='green')
         plt.show()
