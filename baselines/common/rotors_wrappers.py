@@ -53,7 +53,7 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
-        self.record_traj = False
+        self.record_traj = True
 
         self.robot_odom = collections.deque([])
         self.msg_cnt = 0
@@ -64,7 +64,8 @@ class RotorsWrappers:
         self.seed()
 
         self.shortest_dist_line = []
-        self.robot_trajectory = np.array([0,0,0])
+        self.robot_trajectory = np.array([0, 0, 0])
+        self.robot_velocity = np.array([0, 0, 0])
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
@@ -176,8 +177,11 @@ class RotorsWrappers:
             robot_odom = self.robot_odom[0]
             robot_position = np.array([robot_odom.pose.pose.position.x, robot_odom.pose.pose.position.y, robot_odom.pose.pose.position.z])
             self.robot_trajectory = np.vstack([self.robot_trajectory, robot_position])
+            robot_twist = np.array([robot_odom.twist.twist.linear.x, robot_odom.twist.twist.linear.y, robot_odom.twist.twist.linear.z])
+            self.robot_velocity = np.vstack([self.robot_velocity, robot_twist])
             if self.done:
-                self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)      
+                self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)
+                self.robot_velocity = np.delete(self.robot_velocity, (0), axis=0)
 
         return (new_obs, reward, self.done, info)
 
@@ -503,18 +507,18 @@ class RotorsWrappers:
         # self.timeout_timer = rospy.Timer(rospy.Duration(self.goal_generation_radius * 5), self.timer_callback)
         if time <= 0:
             time = 1.0
-        self.timeout_timer = rospy.Timer(rospy.Duration(time), self.timer_callback)   
+        self.timeout_timer = rospy.Timer(rospy.Duration(time), self.timer_callback)
 
     def change_environment(self):
-        self.pause_physics_proxy(EmptyRequest()) 
+        self.pause_physics_proxy(EmptyRequest())
         number_of_stat_objects = 50
 
-        for i in range(number_of_stat_objects):  
+        for i in range(number_of_stat_objects):
             new_position = ModelState()
             new_position.model_name = 'easySimple Stone' + str(i)
             new_position.reference_frame = 'world'
 
-            # randomize initial position 
+            # randomize initial position
             state_high = np.array([10.0, 10.0, 0], dtype=np.float32)
             state_low = np.array([-10.0, -10.0, 0], dtype=np.float32)
             state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
@@ -525,38 +529,68 @@ class RotorsWrappers:
             new_position.pose.orientation.y = 0
             new_position.pose.orientation.z = 0
             new_position.pose.orientation.w = 1
-            
+
             self.model_state_publisher.publish(new_position)
             time.sleep(0.03) # since there is no ros wall rate option i python... (need time between diff pub)
 
         self.unpause_physics_proxy(EmptyRequest())
 
-    
-    def xyz_response(self):
+
+    def position_xyz_response(self):
         fig,ax = plt.subplots(3,1,clear=True)
 
         #Plot xyz-xyz_ref
         ax[0].plot(self.robot_trajectory[:,0])
-        ax[0].axhline(y=self.goal_coordinates.x, xmin=0, xmax=1,color='r',linestyle='--')
+        ax[0].axhline(y=self.goal_coordinates.x, xmin=0, xmax=1, color='r',linestyle='--')
+        ax[0].set_xlim(left=0)
         ax[0].set_ylabel("x-position [m]")
         ax[0].set_xlabel("Steps")
         ax[0].legend(["x", "$x_{ref}$"], loc='lower right')
 
-
-
         ax[1].plot(self.robot_trajectory[:,1])
-        ax[1].axhline(y=self.goal_coordinates.y, xmin=0, xmax=1,color = 'r',linestyle='--')
+        ax[1].axhline(y=self.goal_coordinates.y, xmin=0, xmax=1, color = 'r',linestyle='--')
+        ax[1].set_xlim(left=0)
         ax[1].set_ylabel("y-position [m]")
         ax[1].set_xlabel("Steps")
         ax[1].legend(["y", "$y_{ref}$"], loc='lower right')
 
         ax[2].plot(self.robot_trajectory[:,2])
-        ax[2].axhline(y=self.goal_coordinates.z, xmin=0, xmax=1,color='r',linestyle='--')
+        ax[2].axhline(y=self.goal_coordinates.z, xmin=0, xmax=1, color='r',linestyle='--')
+        ax[2].set_xlim(left=0)
         ax[2].set_ylabel("z-position [m]")
         ax[2].set_xlabel("Steps")
         ax[2].legend(["z", "$z_{ref}$"], loc='lower right')
 
-        fig.suptitle("MAV position vs. goal position")
+        fig.suptitle("RMF position vs. goal position")
+        plt.show()
+
+    def velocity_xyz_response(self):
+        fig,ax = plt.subplots(3,1,clear=True)
+        time.sleep(0.03)
+        #Plot vel_xyz-vel_xyz_ref
+        ax[0].plot(self.robot_velocity[:,0])
+        ax[0].axhline(y=0, xmin=0, xmax=1, color='r', linestyle='--')
+        ax[0].set_xlim(left=0)
+        ax[0].set_ylabel("x-velocity [m/s]")
+        ax[0].set_xlabel("Steps")
+        ax[0].legend(["$v_{x}$", "$v_{x_{ref}}$"], loc='lower right')
+        plt.xlim(left=0)
+
+        ax[1].plot(self.robot_velocity[:,1])
+        ax[1].axhline(y=0, xmin=0, xmax=1, color = 'r', linestyle='--')
+        ax[1].set_xlim(left=0)
+        ax[1].set_ylabel("y-velocity [m/s]")
+        ax[1].set_xlabel("Steps")
+        ax[1].legend(["$v_{y}$", "$v_{y_{ref}}$"], loc='lower right')
+
+        ax[2].plot(self.robot_velocity[:,2])
+        ax[2].axhline(y=0, xmin=0.0, xmax=1, color='r', linestyle='--')#xmin=0, xmax=1,
+        ax[2].set_ylabel("z-velocity [m/s]")
+        ax[2].set_xlabel("Steps")
+        ax[2].legend(["$v_{z}$", "$v_{z_{ref}}$"], loc='lower right')
+        ax[2].set_xlim(left=0)
+
+        fig.suptitle("RMF velocity vs. goal velocity")
         plt.show()
 
     def calculate_opt_trajectory_distance(self, robot_pos): #Eilef Both in World frame
@@ -608,7 +642,7 @@ class RotorsWrappers:
         ax.scatter(x_robo, y_robo, z_robo, c="blue")
         ax.scatter(x_opt, y_opt, z_opt, c="red")
         ax.scatter(self.goal_coordinates.x, self.goal_coordinates.y, self.goal_coordinates.z)
-        ax.set_title(f'MAV trajectory vs. optimal line trajectory \n RMS: {RMS:.4f}')
+        ax.set_title(f'RMF trajectory (blue) vs. optimal line trajectory (red) \n RMS: {RMS:.4f}')
 
         #plt.plot(x_lines,y_lines,z_lines, color ='green')
         plt.show()
