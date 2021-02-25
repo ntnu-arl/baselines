@@ -220,8 +220,8 @@ def main(args):
     arg_parser = common_arg_parser()
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
-    
-    analyze_plots = False
+
+    analyze_plots = True
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -258,7 +258,7 @@ def main(args):
         #num_sims = 10
         #sim_done = False
         #sim_ctr = 0
-        
+
         while True:
             if new_goal:
                 reach_goal_trajectory = np.array([])
@@ -290,7 +290,8 @@ def main(args):
                 if analyze_plots == True:
                     env.pause()
 
-                    env.xyz_response()
+                    env.position_xyz_response()
+                    env.velocity_xyz_response()
                     RMS, goal = env.compare_trajectory_with_optimal(analyze_plots)
                     avrg_RMS = np.append(avrg_RMS, RMS)
                     all_goals = np.append(all_goals, goal)
