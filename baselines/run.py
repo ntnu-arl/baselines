@@ -17,6 +17,7 @@ from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
 from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
 from baselines import logger
 from importlib import import_module
+#from baselines.common.lidar_feature_ext import LidarFeatureExtract
 
 try:
     from mpi4py import MPI
@@ -219,6 +220,7 @@ def main(args):
     arg_parser = common_arg_parser()
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
+    
     analyze_plots = False
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
@@ -256,7 +258,7 @@ def main(args):
         #num_sims = 10
         #sim_done = False
         #sim_ctr = 0
-
+        
         while True:
             if new_goal:
                 reach_goal_trajectory = np.array([])
