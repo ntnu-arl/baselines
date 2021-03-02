@@ -69,7 +69,7 @@ class RotorsWrappers:
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
 
-       
+
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
@@ -110,7 +110,7 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 10.0)
+        self.goal_reward = rospy.get_param('goal_reward', 50.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
         self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
 
@@ -145,8 +145,6 @@ class RotorsWrappers:
         Qx = self.Q_state.dot(new_obs[0:6])
         xT_Qx = new_obs[0:6].transpose().dot(Qx) / 250.0
 
-        print(xT_Qx)
-
         Ru = self.R_action.dot(action)
         uT_Ru = action.transpose().dot(Ru) / 250.0
         reward = - uT_Ru
@@ -163,6 +161,7 @@ class RotorsWrappers:
             print('reach goal!')
         else:
             reward = reward - xT_Qx
+            reward = reward  - exp((new_obs[6]**2/2*1))
             pass
 
         # collide?
@@ -181,10 +180,11 @@ class RotorsWrappers:
 
         #print(new_obs[6])
         #self.calculate_cross_track_error()
-        if new_obs[6] < 1:
-            reward = reward  + exp(-(new_obs[6]**2/2*1))
+        #if new_obs[6] < 10:
 
-        
+            #print(new_obs[6])
+
+
         if self.record_traj:
             robot_odom = self.robot_odom[0]
             robot_position = np.array([robot_odom.pose.pose.position.x, robot_odom.pose.pose.position.y, robot_odom.pose.pose.position.z])
@@ -194,7 +194,7 @@ class RotorsWrappers:
             if self.done:
                 self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)
                 self.robot_velocity = np.delete(self.robot_velocity, (0), axis=0)
-        
+
 
         return (new_obs, reward, self.done, info)
 
@@ -522,20 +522,20 @@ class RotorsWrappers:
             time = 1.0
         self.timeout_timer = rospy.Timer(rospy.Duration(time), self.timer_callback)
 
-    
+
     def calculate_cross_track_error(self):
-        target = np.array([self.current_goal.position.x, self.current_goal.position.y, self.current_goal.position.z]) 
-        init_pos = np.array([self.init_pose.position.x, self.init_pose.position.y, self.init_pose.position.z])  
+        target = np.array([self.current_goal.position.x, self.current_goal.position.y, self.current_goal.position.z])
+        init_pos = np.array([self.init_pose.position.x, self.init_pose.position.y, self.init_pose.position.z])
         robot_odom = self.robot_odom[0]
         robot_position = np.array([robot_odom.pose.pose.position.x, robot_odom.pose.pose.position.y, robot_odom.pose.pose.position.z])
 
         delta_xyz = init_pos - target
         dist_ac = np.dot(robot_position - target, delta_xyz)/np.dot(delta_xyz, delta_xyz)
         e_track = np.linalg.norm(dist_ac*delta_xyz + target - robot_position)
-        
+
         return e_track
-    
-    
+
+
     def change_environment(self):
         self.pause_physics_proxy(EmptyRequest())
         number_of_stat_objects = 50
@@ -594,7 +594,7 @@ class RotorsWrappers:
     def velocity_xyz_response(self):
         fig,ax = plt.subplots(3,1,clear=True)
         time.sleep(0.03)
-        
+
         #Plot vel_xyz-vel_xyz_ref
         ax[0].plot(self.robot_velocity[:,0])
         ax[0].axhline(y=0, xmin=0, xmax=1, color='r', linestyle='--')
@@ -616,12 +616,12 @@ class RotorsWrappers:
         ax[2].set_ylabel("z-velocity [m/s]")
         ax[2].set_xlabel("Steps")
         ax[2].legend(["$v_{z}$", "$v_{z_{ref}}$"], loc='lower right')
-        
+
 
         fig.suptitle("RMF velocity vs. goal velocity")
         plt.show()
 
-    def calculate_opt_trajectory_distance(self, robot_pos): 
+    def calculate_opt_trajectory_distance(self, robot_pos):
         num_steps = 80
         self.shortest_dist_line = []
         shortest_dist_x = np.linspace(robot_pos.x, self.goal_coordinates.x, num_steps)
