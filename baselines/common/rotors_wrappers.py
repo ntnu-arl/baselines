@@ -16,7 +16,7 @@ from gym import core, spaces
 from gym.utils import seeding
 from baselines.common.lidar_feature_ext import LidarFeatureExtract
 
-from math import sqrt
+from math import sqrt, atan2, sin, cos, exp
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -31,13 +31,15 @@ class RotorsWrappers:
         self.current_goal = None
         self.get_params()
 
+        self.init_pose = None
+
         # Imitiate Gym variables
         action_high = np.array([self.max_acc_x, self.max_acc_y, self.max_acc_z], dtype=np.float32)
         self.action_space = spaces.Box(low=-action_high, high=action_high, dtype=np.float32)
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
+        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         #pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         state_robot_low = -state_robot_high
         #pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
@@ -67,6 +69,8 @@ class RotorsWrappers:
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
 
+       
+
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
@@ -89,7 +93,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 10.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -106,7 +110,7 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 100.0)
+        self.goal_reward = rospy.get_param('goal_reward', 10.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
         self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
 
@@ -141,6 +145,8 @@ class RotorsWrappers:
         Qx = self.Q_state.dot(new_obs[0:6])
         xT_Qx = new_obs[0:6].transpose().dot(Qx) / 250.0
 
+        print(xT_Qx)
+
         Ru = self.R_action.dot(action)
         uT_Ru = action.transpose().dot(Ru) / 250.0
         reward = - uT_Ru
@@ -173,6 +179,12 @@ class RotorsWrappers:
             print('timeout')
             info = {'status':'timeout'}
 
+        #print(new_obs[6])
+        #self.calculate_cross_track_error()
+        if new_obs[6] < 1:
+            reward = reward  + exp(-(new_obs[6]**2/2*1))
+
+        
         if self.record_traj:
             robot_odom = self.robot_odom[0]
             robot_position = np.array([robot_odom.pose.pose.position.x, robot_odom.pose.pose.position.y, robot_odom.pose.pose.position.z])
@@ -182,6 +194,7 @@ class RotorsWrappers:
             if self.done:
                 self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)
                 self.robot_velocity = np.delete(self.robot_velocity, (0), axis=0)
+        
 
         return (new_obs, reward, self.done, info)
 
@@ -194,7 +207,8 @@ class RotorsWrappers:
             goad_in_vehicle_frame.pose.pose.position.z,
             goad_in_vehicle_frame.twist.twist.linear.x,
             goad_in_vehicle_frame.twist.twist.linear.y,
-            goad_in_vehicle_frame.twist.twist.linear.z])
+            goad_in_vehicle_frame.twist.twist.linear.z,
+            self.calculate_cross_track_error()])
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
             #new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
@@ -431,8 +445,7 @@ class RotorsWrappers:
         #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
 
         # put the robot at the start pose
-        self.spawn_robot(start_pose)
-
+        self.init_pose, _ = self.spawn_robot(start_pose)
         self.current_goal = goal
         self.draw_new_goal(goal)
         self.goal_training_publisher.publish(goal)
@@ -509,6 +522,20 @@ class RotorsWrappers:
             time = 1.0
         self.timeout_timer = rospy.Timer(rospy.Duration(time), self.timer_callback)
 
+    
+    def calculate_cross_track_error(self):
+        target = np.array([self.current_goal.position.x, self.current_goal.position.y, self.current_goal.position.z]) 
+        init_pos = np.array([self.init_pose.position.x, self.init_pose.position.y, self.init_pose.position.z])  
+        robot_odom = self.robot_odom[0]
+        robot_position = np.array([robot_odom.pose.pose.position.x, robot_odom.pose.pose.position.y, robot_odom.pose.pose.position.z])
+
+        delta_xyz = init_pos - target
+        dist_ac = np.dot(robot_position - target, delta_xyz)/np.dot(delta_xyz, delta_xyz)
+        e_track = np.linalg.norm(dist_ac*delta_xyz + target - robot_position)
+        
+        return e_track
+    
+    
     def change_environment(self):
         self.pause_physics_proxy(EmptyRequest())
         number_of_stat_objects = 50
@@ -567,6 +594,7 @@ class RotorsWrappers:
     def velocity_xyz_response(self):
         fig,ax = plt.subplots(3,1,clear=True)
         time.sleep(0.03)
+        
         #Plot vel_xyz-vel_xyz_ref
         ax[0].plot(self.robot_velocity[:,0])
         ax[0].axhline(y=0, xmin=0, xmax=1, color='r', linestyle='--')
@@ -574,7 +602,6 @@ class RotorsWrappers:
         ax[0].set_ylabel("x-velocity [m/s]")
         ax[0].set_xlabel("Steps")
         ax[0].legend(["$v_{x}$", "$v_{x_{ref}}$"], loc='lower right')
-        plt.xlim(left=0)
 
         ax[1].plot(self.robot_velocity[:,1])
         ax[1].axhline(y=0, xmin=0, xmax=1, color = 'r', linestyle='--')
@@ -584,16 +611,17 @@ class RotorsWrappers:
         ax[1].legend(["$v_{y}$", "$v_{y_{ref}}$"], loc='lower right')
 
         ax[2].plot(self.robot_velocity[:,2])
-        ax[2].axhline(y=0, xmin=0.0, xmax=1, color='r', linestyle='--')#xmin=0, xmax=1,
+        ax[2].axhline(y=0, xmin=0, xmax=1, color = 'r', linestyle='--')
+        ax[2].set_xlim(left=0)
         ax[2].set_ylabel("z-velocity [m/s]")
         ax[2].set_xlabel("Steps")
         ax[2].legend(["$v_{z}$", "$v_{z_{ref}}$"], loc='lower right')
-        ax[2].set_xlim(left=0)
+        
 
         fig.suptitle("RMF velocity vs. goal velocity")
         plt.show()
 
-    def calculate_opt_trajectory_distance(self, robot_pos): #Eilef Both in World frame
+    def calculate_opt_trajectory_distance(self, robot_pos): 
         num_steps = 80
         self.shortest_dist_line = []
         shortest_dist_x = np.linspace(robot_pos.x, self.goal_coordinates.x, num_steps)
