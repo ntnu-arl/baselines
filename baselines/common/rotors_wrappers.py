@@ -93,7 +93,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 10.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -110,9 +110,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 50.0)
+        self.goal_reward = rospy.get_param('goal_reward', 20.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 20.0)
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -161,7 +161,10 @@ class RotorsWrappers:
             print('reach goal!')
         else:
             reward = reward - xT_Qx
-            reward = reward  - exp((new_obs[6]**2/2*1))
+            if new_obs[6] > 10:
+                reward = reward - 3
+            else:
+                reward = reward  - exp(new_obs[6]**2/(2*50))
             pass
 
         # collide?
@@ -195,7 +198,8 @@ class RotorsWrappers:
                 self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)
                 self.robot_velocity = np.delete(self.robot_velocity, (0), axis=0)
 
-
+        #print("Distance from optimal path:", new_obs[6])
+        #print("Reward for this step:", reward)
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
