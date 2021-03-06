@@ -92,7 +92,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 10.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -160,11 +160,8 @@ class RotorsWrappers:
             print('reach goal!')
         else:
             reward = reward - xT_Qx
-            if new_obs[6] > 10:
-                reward = reward - 3
-            else:
-                reward = reward  - exp(new_obs[6]**2/(2*50))
-            pass
+
+        #r clearance (the distance to the closest obstacle)
 
         # collide?
         if self.collide:
@@ -202,11 +199,11 @@ class RotorsWrappers:
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
-        #print(self.lidar_data.extracted_features) 
+        #print(self.lidar_data.extracted_features)
         #self.lidar_data
         lidar_features = self.lidar_data.extracted_lidar_features()
         print(lidar_features)
-        
+
         if (len(self.robot_odom) > 0):
             current_odom = self.robot_odom[0]
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
@@ -458,7 +455,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
         self.goal_training_publisher.publish(goal)
         self.reset_timer(r * 3)
-        self.lidar_data.reset_lidar_storage() 
+        self.lidar_data.reset_lidar_storage()
         self.calculate_opt_trajectory_distance(start_pose.position)
 
         obs = self.get_new_obs()

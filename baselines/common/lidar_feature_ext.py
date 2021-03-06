@@ -18,9 +18,10 @@ class LidarFeatureExtract:
         #self.bridge = cv.CvBridge() # <- fuck you
 
         self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_lidar_data)
-        self.batch_last_samples = np.empty((0,3), np.int32)#np.float32)
+        self.batch_last_samples = np.empty((0,3), np.float32)#np.float32)
         self.size_batch = 0
-        self.number_of_features = 4
+        self.number_of_features = 8
+        self.extracted_features = np.empty((self.number_of_features,1), np.float32)
 
     #def show_depth_img_from_data(self, data):
     #    img_arr = list(data.data)
@@ -36,49 +37,45 @@ class LidarFeatureExtract:
         if self.size_batch >= 10:
             #pcd.points = o3d.utility.Vector3dVector(self.batch_last_samples)
             #o3d.visualization.draw_geometries([pcd])
-            
+
             self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
-            
+
         self.batch_last_samples = np.append(self.batch_last_samples, xyz, axis=0)
         self.size_batch += 1
-        
+
     def extracted_lidar_features(self):
         pcd = o3d.geometry.PointCloud()
-        extracted_features = np.empty((0,1), np.int32)
+        #self.extracted_features = np.empty((0,1), np.int32)
         extracted_features_points = np.empty((0,3), np.int32)
-        print(self.batch_last_samples)
         if len(self.batch_last_samples) > 0:
             for n in range (self.number_of_features):
-                print(self.batch_last_samples)
                 sector = self.subdivide_pointcloud_to_sectors(self.batch_last_samples, n, self.number_of_features)
-                pcd.points = o3d.utility.Vector3dVector(sector)
-                o3d.visualization.draw_geometries([pcd])
-                print(sector.shape())
-                if sector.shape().shape[0] > 0 :
-                    r, closesd_p = self.get_distance_to_closest_point(sector)
-                    extracted_features = np.append(extracted_features, r)
+                if sector.shape[0] > 0 :
+                    distance, closesd_p = self.get_distance_to_closest_point(sector)
+                    self.extracted_features[n] = distance
                     extracted_features_points = np.vstack([extracted_features_points, closesd_p])
-                
-                pcd.points = o3d.utility.Vector3dVector(sector)
-                o3d.visualization.draw_geometries([pcd])
+
+                #pcd.points = o3d.utility.Vector3dVector(sector)
+                #o3d.visualization.draw_geometries([pcd])
         else:
-            extracted_features = np.full(self.number_of_features, 3)
+            self.extracted_features = np.full(self.number_of_features, 3.0)
         #print(extracted_features)
         #print(extracted_features_points)
-        
+
         #pcd.points = o3d.utility.Vector3dVector(extracted_features_points)
         #rgb = np.asarray([0.0, 255.0, 0.0])
         #rgb_t = np.transpose(rgb)/255.0
         #pcd.colors = o3d.utility.Vector3dVector([rgb_t, rgb_t, rgb_t, rgb_t])
-        
+
 
         #pcd.points = o3d.utility.Vector3dVector(self.batch_last_samples)
         #o3d.visualization.draw_geometries([pcd])
-        return extracted_features
+        return self.extracted_features
 
     def reset_lidar_storage(self):
         print("empty lidar data")
         self.batch_last_samples = np.empty((0,3), np.float32) #clean all stored samples
+        self.extracted_features = np.empty((self.number_of_features,1), np.float32)
 
 
     def subdivide_pointcloud_to_sectors(self, pc, sliceN, n_slices):
