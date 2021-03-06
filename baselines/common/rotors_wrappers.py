@@ -68,8 +68,7 @@ class RotorsWrappers:
         self.shortest_dist_line = []
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
-
-
+        self.lidar_data = LidarFeatureExtract()
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
@@ -203,6 +202,11 @@ class RotorsWrappers:
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
+        #print(self.lidar_data.extracted_features) 
+        #self.lidar_data
+        lidar_features = self.lidar_data.extracted_lidar_features()
+        print(lidar_features)
+        
         if (len(self.robot_odom) > 0):
             current_odom = self.robot_odom[0]
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
@@ -454,7 +458,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
         self.goal_training_publisher.publish(goal)
         self.reset_timer(r * 3)
-
+        self.lidar_data.reset_lidar_storage() 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
         obs = self.get_new_obs()
