@@ -110,7 +110,7 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 20.0)
+        self.goal_reward = rospy.get_param('goal_reward', 50.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
         self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 20.0)
 
@@ -160,11 +160,11 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx
-            if new_obs[6] > 10:
-                reward = reward - 3
+            #reward = reward - xT_Qx
+            if new_obs[6] > 2.5:
+                reward = reward - xT_Qx - 1
             else:
-                reward = reward  - exp(new_obs[6]**2/(2*50))
+                reward = reward - xT_Qx - (exp(new_obs[6]**2/(2*5)) - 1)
             pass
 
         # collide?
@@ -172,6 +172,7 @@ class RotorsWrappers:
             self.collide = False
             reward = reward - self.obstacle_max_penalty
             self.done = True
+            print("collided!")
             info = {'status':'collide'}
 
         # time out?
