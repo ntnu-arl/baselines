@@ -22,7 +22,8 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-PCL_FEATURE_SIZE = 1440
+#PCL_FEATURE_SIZE = 1440
+PCL_FEATURE_SIZE = 8
 
 class RotorsWrappers:
     def __init__(self):
@@ -39,15 +40,21 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
-        #pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 5) #LIDAR init
+        
+        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
+        
+        pcl_feature_high = 50 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        
+        state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
+        state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
+
+        #pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         #pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
-
-        #state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
-        #state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
-
-        self.observation_space = spaces.Box(low=state_robot_low, high=state_robot_high, dtype=np.float32)
+        
+        self.observation_space = spaces.Box(low=state_low, high=state_high, dtype=np.float32)
         self.reward_range = (-np.inf, np.inf)
         self.metadata = {"t_start": time.time(), "env_id": "rotors-rmf"}
 
@@ -68,7 +75,7 @@ class RotorsWrappers:
         self.shortest_dist_line = []
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
-        self.lidar_data = LidarFeatureExtract()
+        
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
@@ -92,7 +99,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 10.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -152,6 +159,9 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
+        smallest_dist = np.amin(new_obs[6:14])
+        reward_small_dist = exp(-(smallest_dist**2)/(2*5)) #r clearance (the distance to the closest obstacle)
+
         # reach goal?
         if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
             reward = reward + self.goal_reward
@@ -159,9 +169,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx
-
-        #r clearance (the distance to the closest obstacle)
+            reward = reward - xT_Qx #- reward_small_dist
 
         # collide?
         if self.collide:
@@ -199,21 +207,27 @@ class RotorsWrappers:
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
-        #print(self.lidar_data.extracted_features)
-        #self.lidar_data
-        lidar_features = self.lidar_data.extracted_lidar_features()
-        print(lidar_features)
+        
 
         if (len(self.robot_odom) > 0):
             current_odom = self.robot_odom[0]
+            
+            start_time = time.time()
+            self.pause()
+            pcl_features = self.lidar_data.extracted_lidar_features()
+            print(pcl_features)
+            self.unpause()
+            print("--- %s seconds ---" % (time.time() - start_time))
+            #print(pcl_features)
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
             goad_in_vehicle_frame.pose.pose.position.y,
             goad_in_vehicle_frame.pose.pose.position.z,
             goad_in_vehicle_frame.twist.twist.linear.x,
             goad_in_vehicle_frame.twist.twist.linear.y,
-            goad_in_vehicle_frame.twist.twist.linear.z,
-            self.calculate_cross_track_error()])
+            goad_in_vehicle_frame.twist.twist.linear.z])
+            new_obs = np.concatenate((new_obs, pcl_features), axis=None)
+            #print(new_obs)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
             #new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
@@ -543,7 +557,7 @@ class RotorsWrappers:
 
     def change_environment(self):
         self.pause_physics_proxy(EmptyRequest())
-        number_of_stat_objects = 50
+        number_of_stat_objects = 10
 
         for i in range(number_of_stat_objects):
             new_position = ModelState()
