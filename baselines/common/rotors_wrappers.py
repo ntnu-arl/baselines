@@ -14,9 +14,8 @@ from visualization_msgs.msg import MarkerArray
 from std_msgs.msg import Float64MultiArray
 from gym import core, spaces
 from gym.utils import seeding
-from baselines.common.lidar_feature_ext import LidarFeatureExtract
 
-from math import sqrt, atan2, sin, cos, exp
+from math import sqrt, exp
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -93,7 +92,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -112,7 +111,7 @@ class RotorsWrappers:
         self.R_action = np.array(list(self.R_action))
         self.goal_reward = rospy.get_param('goal_reward', 50.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 40.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 30.0)
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -132,7 +131,6 @@ class RotorsWrappers:
         command.thrust.z = action[0][2]
         self.cmd_publisher.publish(command)
 
-        #test_x = LidarFeatureExtract()
         #test_x.print_data(
 
         # ros sleep 50ms
@@ -153,6 +151,10 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
+        path_reward = 0.11
+        if new_obs[6] < 1:
+            path_reward = exp(new_obs[6]**2/(2*5)) - 1
+
         # reach goal?
         if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
             reward = reward + self.goal_reward
@@ -160,12 +162,12 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            #reward = reward - xT_Qx
-            if new_obs[6] > 2.5:
-                reward = reward - xT_Qx - 1
-            else:
-                reward = reward - xT_Qx - (exp(new_obs[6]**2/(2*5)) - 1)
-            pass
+            reward = reward - xT_Qx - path_reward
+            #if new_obs[6] > 1:
+        #        reward = reward - xT_Qx
+        #    else:
+        #        reward = reward - xT_Qx# + exp(-(new_obs[6]**2/0.07)) #(exp(new_obs[6]**2/(2*5)) - 1)
+            #pass
 
         # collide?
         if self.collide:
@@ -181,13 +183,6 @@ class RotorsWrappers:
             self.done = True
             print('timeout')
             info = {'status':'timeout'}
-
-        #print(new_obs[6])
-        #self.calculate_cross_track_error()
-        #if new_obs[6] < 10:
-
-            #print(new_obs[6])
-
 
         if self.record_traj:
             robot_odom = self.robot_odom[0]
@@ -454,7 +449,7 @@ class RotorsWrappers:
         self.current_goal = goal
         self.draw_new_goal(goal)
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3)
+        self.reset_timer(r * 3) #r * 3
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
