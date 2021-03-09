@@ -40,7 +40,7 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 5) #LIDAR init
+        #self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 5) #LIDAR init
         
         state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
@@ -212,12 +212,13 @@ class RotorsWrappers:
         if (len(self.robot_odom) > 0):
             current_odom = self.robot_odom[0]
             
-            start_time = time.time()
-            self.pause()
-            pcl_features = self.lidar_data.extracted_lidar_features()
-            print(pcl_features)
-            self.unpause()
-            print("--- %s seconds ---" % (time.time() - start_time))
+            #start_time = time.time()
+            #self.pause()
+            
+            pcl_features = np.array([10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]) #self.lidar_data.extracted_lidar_features()
+            #print(pcl_features)
+            #self.unpause()
+            #print("--- %s seconds ---" % (time.time() - start_time))
             #print(pcl_features)
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
@@ -469,7 +470,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
         self.goal_training_publisher.publish(goal)
         self.reset_timer(r * 3)
-        self.lidar_data.reset_lidar_storage()
+        #self.lidar_data.reset_lidar_storage()
         self.calculate_opt_trajectory_distance(start_pose.position)
 
         obs = self.get_new_obs()

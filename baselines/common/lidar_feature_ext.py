@@ -1,10 +1,9 @@
 import rospy
-import time
-from sensor_msgs.msg import Image
-from std_msgs.msg import UInt8MultiArray
+#from sensor_msgs.msg import Image
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs.point_cloud2 import read_points
-import cv2
+#from std_msgs.msg import UInt8MultiArray
+#import cv2
 import open3d as o3d
 import math
 import numpy as np
@@ -37,8 +36,9 @@ class LidarFeatureExtract:
     def store_lidar_data(self, data):
         points = np.array(list(read_points(data)))
         xyz = np.array([(x, y, z) for x, y, z, _, _ in points]) # assumes XYZIR
+        
         xyz = self.filter_points(xyz, -10, 10)
-
+        print(xyz.shape[0])
         if self.size_batch >= self.bach_size_pc:
             #self.vis_points(self.batch_last_samples)
             self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
@@ -61,7 +61,6 @@ class LidarFeatureExtract:
         return xyz
     
     def extracted_lidar_features(self):
-        pcd = o3d.geometry.PointCloud()
         extracted_features_points = np.empty((0,3), np.int32)
         if len(self.batch_last_samples) > 0:
             pc = self.batch_last_samples #needed this due to concurrency issues
