@@ -68,8 +68,6 @@ class RotorsWrappers:
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
 
-
-
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
@@ -130,8 +128,6 @@ class RotorsWrappers:
         command.thrust.y = action[0][1]
         command.thrust.z = action[0][2]
         self.cmd_publisher.publish(command)
-
-        #test_x.print_data(
 
         # ros sleep 50ms
         self.sleep_rate.sleep()
