@@ -162,11 +162,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx - path_reward
-            #if new_obs[6] > 1:
-        #        reward = reward - xT_Qx
-        #    else:
-        #        reward = reward - xT_Qx# + exp(-(new_obs[6]**2/0.07)) #(exp(new_obs[6]**2/(2*5)) - 1)
+            reward = reward - xT_Qx - path_reward 
             #pass
 
         # collide?
