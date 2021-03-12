@@ -470,7 +470,7 @@ class RotorsWrappers:
         self.current_goal = goal
         self.draw_new_goal(goal)
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 20) #extend time
+        self.reset_timer(r * 3) #extend time
         self.lidar_data.reset_lidar_storage()
         self.calculate_opt_trajectory_distance(start_pose.position)
 
