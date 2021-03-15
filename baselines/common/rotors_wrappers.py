@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 #PCL_FEATURE_SIZE = 1440
-PCL_FEATURE_SIZE = 8
+PCL_FEATURE_SIZE = 16
 
 class RotorsWrappers:
     def __init__(self):
@@ -138,9 +138,6 @@ class RotorsWrappers:
         command.thrust.z = action[0][2]
         self.cmd_publisher.publish(command)
 
-        #test_x = LidarFeatureExtract()
-        #test_x.print_data(
-
         # ros sleep 50ms
         self.sleep_rate.sleep()
 
@@ -169,7 +166,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx - reward_small_dist
+            reward = reward - xT_Qx #- reward_small_dist
 
         # collide?
         if self.collide:
@@ -185,12 +182,6 @@ class RotorsWrappers:
             self.done = True
             print('timeout')
             info = {'status':'timeout'}
-
-        #print(new_obs[6])
-        #self.calculate_cross_track_error()
-        #if new_obs[6] < 10:
-
-            #print(new_obs[6])
 
 
         if self.record_traj:
@@ -220,7 +211,6 @@ class RotorsWrappers:
             #print(pcl_features)
             #self.unpause()
             #print("--- %s seconds ---" % (time.time() - start_time))
-            #print(pcl_features)
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
             goad_in_vehicle_frame.pose.pose.position.y,
@@ -229,10 +219,9 @@ class RotorsWrappers:
             goad_in_vehicle_frame.twist.twist.linear.y,
             goad_in_vehicle_frame.twist.twist.linear.z])
             new_obs = np.concatenate((new_obs, pcl_features), axis=None)
-            #print(new_obs)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
-            #new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
+
         else:
             new_obs = None
         return new_obs
