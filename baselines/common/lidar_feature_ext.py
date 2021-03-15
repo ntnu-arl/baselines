@@ -18,7 +18,7 @@ class LidarFeatureExtract:
 
     def __init__(self, feature_size, bach_size_pc):
         self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_lidar_data)
-        self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=10)
+        self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=16)
         self.batch_last_samples = np.empty((1,3), np.float32)
         self.size_batch = 0
         self.bach_size_pc = bach_size_pc
@@ -66,14 +66,11 @@ class LidarFeatureExtract:
                     if sector.shape[0] > 0:
                         distance, closesd_p = self.get_distance_to_closest_point(sector)
                         self.extracted_features[n] = distance
-
                         self.extracted_features_points = np.vstack([self.extracted_features_points, closesd_p])
 
             #self.vis_points(sector)
         else:
             self.extracted_features = np.full(self.number_of_features, 10.0)
-
-        #self.vis_points(self.batch_last_samples)
 
     def reset_lidar_storage(self):
         #clean all stored samples
@@ -82,6 +79,8 @@ class LidarFeatureExtract:
         self.batch_last_samples = np.empty((0,3), np.float32)
         self.extracted_features = np.full(self.number_of_features, 10.0)
         self.size_batch = 0
+        markerArray = MarkerArray()
+        self.pc_features_publisher.publish(markerArray)
 
 
     def subdivide_pointcloud_to_sectors(self, pc):
@@ -110,23 +109,25 @@ class LidarFeatureExtract:
         return index_sector
 
     def get_distance_to_closest_point(self, xyz):
-        dist = 1000
-        closesd_point = [10000, 10000, 10000]
         r = np.linalg.norm(xyz, axis=-1)
         index = np.where(r == np.min(r))
 
         return np.min(r), xyz[index[0][0]]
 
 
-    def mark_feature_points(self, robot_odom, pc_points):
+    def mark_feature_points(self, robot_odom, pc_points, reset):
         #We want to visualize the pc points extracted and used
         #as states in rviz.
         #input: robot_pose (for transformation purposes), pc_points(all feature points)
 
         markerArray = MarkerArray()
-        markerArray = MarkerArray()
         MARKERS_MAX = self.number_of_features
         count = 0
+        if reset:
+            marker = Marker()
+            marker.action = marker.DELETEALL
+            markerArray.markers.append(marker)
+            self.pc_features_publisher.publish(markerArray)
 
         if pc_points.size > 0:
             for xyz in pc_points:
@@ -142,9 +143,6 @@ class LidarFeatureExtract:
                     point.orientation.z = 0
                     point.orientation.w = 1
                     world_point = self.transform_points_to_world_frame(robot_odom, point)
-
-
-
 
                     marker = Marker()
                     marker.header.frame_id = "world"

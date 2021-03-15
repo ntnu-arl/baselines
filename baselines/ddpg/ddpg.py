@@ -34,7 +34,7 @@ def learn(network, env,
           normalize_returns=False,
           normalize_observations=True,
           critic_l2_reg=0.0,
-          actor_lr=1e-5, 
+          actor_lr=1e-5,
           critic_lr=1e-5,
           popart=False,
           gamma=0.99,
@@ -112,7 +112,7 @@ def learn(network, env,
         print("Save models to folder ", save_path)
         save_model = True
     else:
-        save_model = False    
+        save_model = False
 
     eval_episode_rewards_history = deque(maxlen=100)
     episode_rewards_history = deque(maxlen=100)
@@ -147,7 +147,7 @@ def learn(network, env,
     best_return = np.finfo(np.float32).min
 
     for epoch in range(nb_epochs):
-        env.change_environment()
+        #env.change_environment()
         for cycle in range(nb_epoch_cycles):
             # Perform rollouts.
             if nenvs > 1:
@@ -167,7 +167,7 @@ def learn(network, env,
                     env.render()
 
                 # max_action is of dimension A, whereas action is dimension (nenvs, A) - the multiplication gets broadcasted to the batch
-                new_obs, r, done, info = env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])                
+                new_obs, r, done, info = env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
 
                 # note these outputs are batched from vecenv
                 new_obs = np.array([new_obs])
@@ -207,9 +207,9 @@ def learn(network, env,
                     obs = np.array([obs])
                     #print('info:', info)
                     # env.generate_new_goal()
-                    
+
             # pause rotors for training
-            env.pause() 
+            env.pause()
             # Train.
             epoch_actor_losses = []
             epoch_critic_losses = []
