@@ -40,7 +40,7 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        #self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 3) #LIDAR init
+        self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 3) #LIDAR init
 
         state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
@@ -156,7 +156,7 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
-        smallest_dist = np.amin(new_obs[6:22])
+        smallest_dist = np.amin(new_obs[6:16])
         reward_small_dist = exp(-(smallest_dist**2)/(0.9)) #r clearance (the distance to the closest obstacle)
 
         # reach goal?
@@ -205,7 +205,7 @@ class RotorsWrappers:
             #start_time = time.time()
             #self.pause()
 
-            pcl_features = np.full(PCL_FEATURE_SIZE, 10.0) #self.lidar_data.extracted_features
+            pcl_features = self.lidar_data.extracted_features #np.full(PCL_FEATURE_SIZE, 10.0)
             #self.unpause()
             #print("--- %s seconds ---" % (time.time() - start_time))
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
@@ -218,7 +218,7 @@ class RotorsWrappers:
             new_obs = np.concatenate((new_obs, pcl_features), axis=None)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
-            #self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points, False)
+            self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
 
         else:
             new_obs = None
@@ -452,6 +452,9 @@ class RotorsWrappers:
 
         #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
 
+        #reset lidar data
+        self.lidar_data.reset_lidar_storage()
+
         # put the robot at the start pose
         self.init_pose, _ = self.spawn_robot(start_pose)
         self.current_goal = goal
@@ -460,9 +463,7 @@ class RotorsWrappers:
         self.goal_training_publisher.publish(goal)
         self.reset_timer(r * 3) #more time
 
-        #current_odom = self.robot_odom[0]
-        #self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points, True)
-        #self.lidar_data.reset_lidar_storage()
+
         self.calculate_opt_trajectory_distance(start_pose.position)
 
         obs = self.get_new_obs()

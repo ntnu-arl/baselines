@@ -1,5 +1,5 @@
 import rospy
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs.point_cloud2 import read_points
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
@@ -18,74 +18,132 @@ class LidarFeatureExtract:
 
     def __init__(self, feature_size, bach_size_pc):
         self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_lidar_data)
+        self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=10)
         self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=16)
         self.batch_last_samples = np.empty((1,3), np.float32)
         self.size_batch = 0
+        self.max_dist_search = 10.0
         self.bach_size_pc = bach_size_pc
         self.number_of_features = feature_size
-        self.extracted_features = np.full(self.number_of_features, 10.0)
-        self.extracted_features_points = np.empty((3,3), np.int32)
+        self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
+        self.extracted_features_points = np.empty((1,3), np.int32)
+
 
     def store_lidar_data(self, data):
         points = np.array(list(read_points(data)))
         xyz = np.array([(x, y, z) for x, y, z, _, _ in points]) # assumes XYZIR
 
         if xyz.shape[0] > 0:
-            xyz = self.filter_points(xyz, -10, 10)
+            xyz = self.filter_points(xyz, -self.max_dist_search, self.max_dist_search)
 
             if self.size_batch >= self.bach_size_pc:
                 #self.vis_points(self.batch_last_samples)
                 self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
 
-
             self.batch_last_samples = np.vstack([self.batch_last_samples, xyz])
+            
             self.extracted_lidar_features()
 
             self.size_batch += 1
+            
+            #visualize the filtered points in rviz 
+            self.xyz_array_to_pointcloud2(self.batch_last_samples)
 
 
     def filter_points(self, xyz, min_axis, max_axis):
-        #reduce computation time by removing points very far away
+        '''
+        Reduce computation time by removing points very far away
+        '''
         xyz = np.delete(xyz, xyz[:,0] > max_axis, axis=0)
         xyz = np.delete(xyz, xyz[:,0] < min_axis, axis=0)
         xyz = np.delete(xyz, xyz[:,1] > max_axis, axis=0)
         xyz = np.delete(xyz, xyz[:,1] < min_axis, axis=0)
-        #xyz = np.delete(xyz, xyz[:,2] > max_axis, axis=0)
-        #xyz = np.delete(xyz, xyz[:,2] < min_axis, axis=0)
+        xyz = np.delete(xyz, xyz[:,2] > max_axis, axis=0)
+        xyz = np.delete(xyz, xyz[:,2] < min_axis, axis=0)
 
         return xyz
 
+
+    def xyz_array_to_pointcloud2(self, points, stamp=False, frame_id="delta"):
+        '''
+        Create a sensor_msgs.PointCloud2 from an array
+        of points and publishes it.
+        '''
+
+        msg = PointCloud2()
+        if stamp:
+            msg.header.stamp = stamp
+        if frame_id:
+            msg.header.frame_id = frame_id
+        if len(points.shape) == 3:
+            msg.height = points.shape[1]
+            msg.width = points.shape[0]
+        else:
+            msg.height = 1
+            msg.width = len(points)
+        msg.fields = [
+            PointField('x', 0, PointField.FLOAT32, 1),
+            PointField('y', 4, PointField.FLOAT32, 1),
+            PointField('z', 8, PointField.FLOAT32, 1)]
+        msg.is_bigendian = False
+        msg.point_step = 12
+        msg.row_step = 12*points.shape[0]
+        msg.is_dense = int(np.isfinite(points).all())
+        msg.data = np.asarray(points, np.float32).tostring()
+        
+        self.pc_data_stored.publish(msg)
+
+
     def extracted_lidar_features(self):
-        self.extracted_features_points = np.empty((3,3), np.int32)
-        if len(self.batch_last_samples) > 0:
+        self.extracted_features_points = np.empty((1,3), np.int32)
+        if self.batch_last_samples.size > 0:
             pc = self.batch_last_samples #needed this due to concurrency issues
-            index_sector = self.subdivide_pointcloud_to_sectors(self.batch_last_samples)
+            index_sector = self.subdivide_pointcloud_to_sectors(pc)
             for n in range(self.number_of_features):
                 if (len(index_sector[n]) > 0):
                     sector = np.delete(pc, np.array(index_sector[n]), 0)
-                    if sector.shape[0] > 0:
+                    #self.vis_points(self.batch_last_samples)
+                    if sector.size > 0:
                         distance, closesd_p = self.get_distance_to_closest_point(sector)
+                        #if self.extracted_features[n] == distance:
+                        #    print("maybe some error?")
+                        #    print(sector.size)
+                        #    print(distance)
+                        #    self.extracted_features[n] = 10.0
+                            
+                        #else:
                         self.extracted_features[n] = distance
                         self.extracted_features_points = np.vstack([self.extracted_features_points, closesd_p])
+                    else:
+                        self.extracted_features[n] = self.max_dist_search 
+                else:
+                    self.extracted_features[n] = self.max_dist_search
+
+        else:
+            self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
 
             #self.vis_points(sector)
-        else:
-            self.extracted_features = np.full(self.number_of_features, 10.0)
+
 
     def reset_lidar_storage(self):
-        #clean all stored samples
-
-        self.extracted_features_points = np.empty((3,3), np.int32)
-        self.batch_last_samples = np.empty((0,3), np.float32)
-        self.extracted_features = np.full(self.number_of_features, 10.0)
+        '''
+        Clean all stored samples
+        '''
+        self.batch_last_samples = np.empty((1,3), np.float32)
+        self.extracted_features_points = np.empty((1,3), np.int32)
+        self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.size_batch = 0
         markerArray = MarkerArray()
+        marker = Marker()
+        marker.action = marker.DELETEALL
+        markerArray.markers.append(marker)
         self.pc_features_publisher.publish(markerArray)
 
 
     def subdivide_pointcloud_to_sectors(self, pc):
-        #divdes sphere of points in equal sectors
-
+        '''
+        Divdes sphere of points in equal sectors
+        '''
         i = 0
         index_sector = [[] for _ in range(self.number_of_features)]
 
@@ -108,6 +166,7 @@ class LidarFeatureExtract:
 
         return index_sector
 
+
     def get_distance_to_closest_point(self, xyz):
         r = np.linalg.norm(xyz, axis=-1)
         index = np.where(r == np.min(r))
@@ -115,19 +174,15 @@ class LidarFeatureExtract:
         return np.min(r), xyz[index[0][0]]
 
 
-    def mark_feature_points(self, robot_odom, pc_points, reset):
-        #We want to visualize the pc points extracted and used
-        #as states in rviz.
-        #input: robot_pose (for transformation purposes), pc_points(all feature points)
-
+    def mark_feature_points(self, robot_odom, pc_points):
+        '''
+        We want to visualize the pc points extracted and used
+        as states in rviz.
+        input: robot_pose (for transformation purposes), pc_points(all feature points)
+        '''
         markerArray = MarkerArray()
         MARKERS_MAX = self.number_of_features
         count = 0
-        if reset:
-            marker = Marker()
-            marker.action = marker.DELETEALL
-            markerArray.markers.append(marker)
-            self.pc_features_publisher.publish(markerArray)
 
         if pc_points.size > 0:
             for xyz in pc_points:
@@ -153,8 +208,8 @@ class LidarFeatureExtract:
                     marker.scale.z = 0.2
                     marker.color.a = 1.0
                     marker.color.r = 0.0
-                    marker.color.g = 0.0
-                    marker.color.b = 1.0
+                    marker.color.g = 1.0
+                    marker.color.b = 0.0
                     marker.pose = world_point
 
                     # We add the new marker to the MarkerArray, removing the oldest
@@ -174,6 +229,7 @@ class LidarFeatureExtract:
 
                     count += 1
 
+    
     # Input:    robot_odom  : Odometry()
     #           point        : Pose(), in vehicle frame
     # Return:   current_point  : Pose(), in world frame
@@ -207,6 +263,7 @@ class LidarFeatureExtract:
         current_point.orientation.w = current_point_quat[3]
 
         return current_point
+
 
     def vis_points(self, pc):
         #visualize points with open3d

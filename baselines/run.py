@@ -263,7 +263,7 @@ def main(args):
             if new_goal:
                 reach_goal_trajectory = np.array([])
                 new_goal = False
-                env.change_environment()
+                #env.change_environment()
 
             if state is not None:
                 actions, _, state, _ = model.step(obs)
