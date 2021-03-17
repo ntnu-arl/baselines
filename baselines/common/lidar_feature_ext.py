@@ -17,7 +17,7 @@ class LidarFeatureExtract:
     bach_size_pc = 10
 
     def __init__(self, feature_size, bach_size_pc):
-        self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_lidar_data)
+        self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
         self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=10)
         self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=16)
         self.batch_last_samples = np.empty((1,3), np.float32)
@@ -27,27 +27,32 @@ class LidarFeatureExtract:
         self.number_of_features = feature_size
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.extracted_features_points = np.empty((1,3), np.int32)
+        self.store_data = False
 
 
-    def store_lidar_data(self, data):
+    def store_pc_data(self, data):
         points = np.array(list(read_points(data)))
         xyz = np.array([(x, y, z) for x, y, z, _, _ in points]) # assumes XYZIR
 
-        if xyz.shape[0] > 0:
+        if xyz.size > 0 and self.store_data:
             xyz = self.filter_points(xyz, -self.max_dist_search, self.max_dist_search)
 
-            if self.size_batch >= self.bach_size_pc:
-                #self.vis_points(self.batch_last_samples)
-                self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
+            if xyz.size > 0:
+                
 
-            self.batch_last_samples = np.vstack([self.batch_last_samples, xyz])
-            
-            self.extracted_lidar_features()
+                if self.size_batch >= self.bach_size_pc:
+                    #self.vis_points(self.batch_last_samples)
+                    self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
 
-            self.size_batch += 1
-            
-            #visualize the filtered points in rviz 
-            self.xyz_array_to_pointcloud2(self.batch_last_samples)
+                self.batch_last_samples = np.vstack([self.batch_last_samples, xyz])
+                xyz = np.empty((0,3), np.int32)
+                
+                self.extracted_lidar_features()
+
+                self.size_batch += 1
+                
+        #visualize the filtered points in rviz 
+        self.xyz_array_to_pointcloud2(self.batch_last_samples)
 
 
     def filter_points(self, xyz, min_axis, max_axis):
@@ -129,7 +134,7 @@ class LidarFeatureExtract:
         '''
         Clean all stored samples
         '''
-        self.batch_last_samples = np.empty((1,3), np.float32)
+        self.batch_last_samples = np.empty((0,3), np.float32) #np.full((1,3), -100.0) #
         self.extracted_features_points = np.empty((1,3), np.int32)
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.size_batch = 0
