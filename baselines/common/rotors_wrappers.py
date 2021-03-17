@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 #PCL_FEATURE_SIZE = 1440
-PCL_FEATURE_SIZE = 16
+PCL_FEATURE_SIZE = 10
 
 class RotorsWrappers:
     def __init__(self):
@@ -62,7 +62,7 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
-        self.record_traj = True
+        self.record_traj = False
 
         self.robot_odom = collections.deque([])
         self.msg_cnt = 0
@@ -86,7 +86,7 @@ class RotorsWrappers:
         self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
         self.goal_init_publisher = rospy.Publisher("/delta/goal", Pose)
         self.cmd_publisher = rospy.Publisher("/delta/command/rate_thrust", RateThrust)
-        self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=50)
+        self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=1)
         self.sphere_marker_pub = rospy.Publisher('goal_published',
                                                  MarkerArray,
                                                  queue_size=1)
@@ -99,7 +99,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -116,9 +116,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 100.0)
+        self.goal_reward = rospy.get_param('goal_reward', 10.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 40.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -156,7 +156,7 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
-        smallest_dist = np.amin(new_obs[6:14])
+        smallest_dist = np.amin(new_obs[6:22])
         reward_small_dist = exp(-(smallest_dist**2)/(0.9)) #r clearance (the distance to the closest obstacle)
 
         # reach goal?
@@ -199,8 +199,6 @@ class RotorsWrappers:
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
-
-
         if (len(self.robot_odom) > 0):
             current_odom = self.robot_odom[0]
 
@@ -460,7 +458,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #extend time
+        self.reset_timer(r * 3) #more time
 
         #current_odom = self.robot_odom[0]
         #self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points, True)
@@ -484,8 +482,8 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([0.0, 0.0, 8.0], dtype=np.float32)
-            state_low = np.array([5.0, 5.0, 5.0], dtype=np.float32)
+            state_high = np.array([0.0, 0.0, 10.0], dtype=np.float32)
+            state_low = np.array([0.0, 0.0, 8.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
