@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 #PCL_FEATURE_SIZE = 1440
-PCL_FEATURE_SIZE = 10
+PCL_FEATURE_SIZE = 8
 
 class RotorsWrappers:
     def __init__(self):
@@ -118,7 +118,7 @@ class RotorsWrappers:
         self.R_action = np.array(list(self.R_action))
         self.goal_reward = rospy.get_param('goal_reward', 10.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 1.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0)
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
