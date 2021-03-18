@@ -40,9 +40,9 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        
+
         #LIDAR init
-        self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 3) 
+        self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 3)
 
         state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
@@ -145,7 +145,7 @@ class RotorsWrappers:
 
         # get new obs
         new_obs = self.get_new_obs()
-        
+
         # draw lidar features
         current_odom = self.robot_odom[0]
         self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
@@ -213,7 +213,7 @@ class RotorsWrappers:
             #start_time = time.time()
             #self.pause()
 
-            pcl_features = self.lidar_data.extracted_features #np.full(PCL_FEATURE_SIZE, 10.0)
+            pcl_features = np.full(PCL_FEATURE_SIZE, 10.0) #self.lidar_data.extracted_features #
             #self.unpause()
             #print("--- %s seconds ---" % (time.time() - start_time))
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
