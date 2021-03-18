@@ -40,7 +40,9 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 3) #LIDAR init
+        
+        #LIDAR init
+        self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 3) 
 
         state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
@@ -143,6 +145,11 @@ class RotorsWrappers:
 
         # get new obs
         new_obs = self.get_new_obs()
+        
+        # draw lidar features
+        current_odom = self.robot_odom[0]
+        self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
+
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
         Qx = self.Q_state.dot(new_obs[0:6])
@@ -155,8 +162,8 @@ class RotorsWrappers:
 
         info = {'status':'none'}
         self.done = False
-
-        smallest_dist = np.amin(new_obs[6:16])
+        print(new_obs[6:14])
+        smallest_dist = np.amin(new_obs[6:14])
         reward_small_dist = exp(-(smallest_dist**2)/(0.9)) #r clearance (the distance to the closest obstacle)
 
         # reach goal?
@@ -196,6 +203,7 @@ class RotorsWrappers:
 
         #print("Distance from optimal path:", new_obs[6])
         #print("Reward for this step:", reward)
+
         return (new_obs, reward, self.done, info)
 
     def get_new_obs(self):
@@ -218,7 +226,6 @@ class RotorsWrappers:
             new_obs = np.concatenate((new_obs, pcl_features), axis=None)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
-            self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
 
         else:
             new_obs = None
@@ -452,9 +459,6 @@ class RotorsWrappers:
 
         #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
 
-        #reset lidar data
-        self.lidar_data.reset_lidar_storage()
-
         # put the robot at the start pose
         self.init_pose, _ = self.spawn_robot(start_pose)
         self.current_goal = goal
@@ -466,7 +470,14 @@ class RotorsWrappers:
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
+        #reset lidar data
+        self.lidar_data.store_data = False
+        self.lidar_data.reset_lidar_storage()
+        self.lidar_data.store_data = True
+
         obs = self.get_new_obs()
+
+
         return obs
 
     # Input:    position  : Pose()
