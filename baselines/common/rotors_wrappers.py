@@ -63,7 +63,7 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
-        self.record_traj = False
+        self.data_vis = False
 
         self.robot_odom = collections.deque([])
         self.msg_cnt = 0
@@ -147,7 +147,7 @@ class RotorsWrappers:
 
         # draw lidar features
         #current_odom = self.robot_odom[0]
-        #self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
+        #
 
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
@@ -189,19 +189,23 @@ class RotorsWrappers:
             print('timeout')
             info = {'status':'timeout'}
 
-
-        if self.record_traj:
-            robot_odom = self.robot_odom[0]
-            robot_position = np.array([robot_odom.pose.pose.position.x, robot_odom.pose.pose.position.y, robot_odom.pose.pose.position.z])
+        if self.data_vis:
+            current_odom = self.robot_odom[0]
+            
+            # draw lidar features
+            self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
+            
+            # record trajectory
+            robot_position = np.array([current_odom.pose.pose.position.x, current_odom.pose.pose.position.y, current_odom.pose.pose.position.z])
             self.robot_trajectory = np.vstack([self.robot_trajectory, robot_position])
-            robot_twist = np.array([robot_odom.twist.twist.linear.x, robot_odom.twist.twist.linear.y, robot_odom.twist.twist.linear.z])
+            robot_twist = np.array([current_odom.twist.twist.linear.x, current_odom.twist.twist.linear.y, current_odom.twist.twist.linear.z])
             self.robot_velocity = np.vstack([self.robot_velocity, robot_twist])
             if self.done:
                 self.robot_trajectory = np.delete(self.robot_trajectory, (0), axis=0)
                 self.robot_velocity = np.delete(self.robot_velocity, (0), axis=0)
 
         #print("Distance from optimal path:", new_obs[6])
-        print("Reward for this step:", reward)
+        #print("Reward for this step:", reward)
 
         return (new_obs, reward, self.done, info)
 
@@ -209,12 +213,8 @@ class RotorsWrappers:
         if (len(self.robot_odom) > 0):
             current_odom = self.robot_odom[0]
 
-            #start_time = time.time()
-            #self.pause()
-
             pcl_features = self.lidar_data.extracted_features #np.full(PCL_FEATURE_SIZE, 10.0) #
-            #self.unpause()
-            #print("--- %s seconds ---" % (time.time() - start_time))
+            
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
             goad_in_vehicle_frame.pose.pose.position.y,
@@ -558,6 +558,9 @@ class RotorsWrappers:
 
         return e_track
 
+    def set_data_vis(self, set):
+        self.data_vis = set
+        self.lidar_data.set_vis_in_rviz(set)
 
     def change_environment(self):
         self.pause_physics_proxy(EmptyRequest())

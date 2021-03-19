@@ -15,6 +15,7 @@ class LidarFeatureExtract:
 
     number_of_features = 8
     bach_size_pc = 10
+    vis_pc = False
 
     def __init__(self, feature_size, bach_size_pc):
         self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
@@ -28,6 +29,8 @@ class LidarFeatureExtract:
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.extracted_features_points = np.empty((0,3), np.int32)
         self.store_data = False
+        self.vis_pc = False
+
 
 
     def store_pc_data(self, data):
@@ -52,7 +55,8 @@ class LidarFeatureExtract:
                 self.size_batch += 1
 
         #visualize the filtered points in rviz
-        self.xyz_array_to_pointcloud2(self.batch_last_samples)
+        if self.vis_pc:
+            self.xyz_array_to_pointcloud2(self.batch_last_samples)
 
 
     def filter_points(self, xyz, min_axis, max_axis):
@@ -269,6 +273,8 @@ class LidarFeatureExtract:
 
         return current_point
 
+    def set_vis_in_rviz(self, set):
+        self.vis_pc = set
 
     def vis_points(self, pc):
         #visualize points with open3d
