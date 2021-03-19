@@ -191,10 +191,10 @@ class RotorsWrappers:
 
         if self.data_vis:
             current_odom = self.robot_odom[0]
-            
+
             # draw lidar features
             self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
-            
+
             # record trajectory
             robot_position = np.array([current_odom.pose.pose.position.x, current_odom.pose.pose.position.y, current_odom.pose.pose.position.z])
             self.robot_trajectory = np.vstack([self.robot_trajectory, robot_position])
@@ -214,7 +214,7 @@ class RotorsWrappers:
             current_odom = self.robot_odom[0]
 
             pcl_features = self.lidar_data.extracted_features #np.full(PCL_FEATURE_SIZE, 10.0) #
-            
+
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
             goad_in_vehicle_frame.pose.pose.position.y,

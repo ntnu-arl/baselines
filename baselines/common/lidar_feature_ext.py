@@ -32,7 +32,6 @@ class LidarFeatureExtract:
         self.vis_pc = False
 
 
-
     def store_pc_data(self, data):
         points = np.array(list(read_points(data)))
         xyz = np.array([(x, y, z) for x, y, z, _, _ in points]) # assumes XYZIR
@@ -81,7 +80,7 @@ class LidarFeatureExtract:
 
         msg = PointCloud2()
         if stamp:
-            msg.header.stamp = stamp
+            msg.header.stamp = stamp #rospy.Time.now()
         if frame_id:
             msg.header.frame_id = frame_id
         if len(points.shape) == 3:
@@ -187,7 +186,8 @@ class LidarFeatureExtract:
         '''
         We want to visualize the pc points extracted and used
         as states in rviz.
-        input: robot_pose (for transformation purposes), pc_points(all feature points)
+        Input:    robot_odom  : Odometry() #for transformation purposes
+                  pc_points   : np.array (self.number_of_features x 3) #all feature points
         '''
         markerArray = MarkerArray()
         MARKERS_MAX = self.number_of_features
@@ -238,11 +238,12 @@ class LidarFeatureExtract:
 
                     count += 1
 
-
-    # Input:    robot_odom  : Odometry()
-    #           point        : Pose(), in vehicle frame
-    # Return:   current_point  : Pose(), in world frame
     def transform_points_to_world_frame(self, robot_odom, feature_point):
+        '''
+        Input:    robot_odom  : Odometry()
+                  point        : Pose(), in vehicle frame
+        Return:   current_point  : Pose(), in world frame
+        '''
         current_point = Pose()
 
         r_point = R.from_quat([feature_point.orientation.x, feature_point.orientation.y, feature_point.orientation.z, feature_point.orientation.w])

@@ -231,7 +231,7 @@ def main(args):
         configure_logger(args.log_path, format_strs=[])
 
     model, env = train(args, extra_args)
-    
+
     env.set_data_vis(analyze_plots)
 
     if args.save_path is not None and rank == 0:
