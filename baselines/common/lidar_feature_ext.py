@@ -18,15 +18,15 @@ class LidarFeatureExtract:
 
     def __init__(self, feature_size, bach_size_pc):
         self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
-        self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=10)
-        self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=16)
-        self.batch_last_samples = np.empty((1,3), np.float32)
+        self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
+        self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=1)
+        self.batch_last_samples = np.empty((0,3), np.float32)
         self.size_batch = 0
         self.max_dist_search = 10.0
         self.bach_size_pc = bach_size_pc
         self.number_of_features = feature_size
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
-        self.extracted_features_points = np.empty((1,3), np.int32)
+        self.extracted_features_points = np.empty((0,3), np.int32)
         self.store_data = False
 
 
@@ -38,7 +38,7 @@ class LidarFeatureExtract:
             xyz = self.filter_points(xyz, -self.max_dist_search, self.max_dist_search)
 
             if xyz.size > 0:
-                
+
 
                 if self.size_batch >= self.bach_size_pc:
                     #self.vis_points(self.batch_last_samples)
@@ -46,12 +46,12 @@ class LidarFeatureExtract:
 
                 self.batch_last_samples = np.vstack([self.batch_last_samples, xyz])
                 xyz = np.empty((0,3), np.int32)
-                
+
                 self.extracted_lidar_features()
 
                 self.size_batch += 1
-                
-        #visualize the filtered points in rviz 
+
+        #visualize the filtered points in rviz
         self.xyz_array_to_pointcloud2(self.batch_last_samples)
 
 
@@ -95,7 +95,7 @@ class LidarFeatureExtract:
         msg.row_step = 12*points.shape[0]
         msg.is_dense = int(np.isfinite(points).all())
         msg.data = np.asarray(points, np.float32).tostring()
-        
+
         self.pc_data_stored.publish(msg)
 
 
@@ -115,12 +115,12 @@ class LidarFeatureExtract:
                         #    print(sector.size)
                         #    print(distance)
                         #    self.extracted_features[n] = 10.0
-                            
+
                         #else:
                         self.extracted_features[n] = distance
                         self.extracted_features_points = np.vstack([self.extracted_features_points, closesd_p])
                     else:
-                        self.extracted_features[n] = self.max_dist_search 
+                        self.extracted_features[n] = self.max_dist_search
                 else:
                     self.extracted_features[n] = self.max_dist_search
 
@@ -234,7 +234,7 @@ class LidarFeatureExtract:
 
                     count += 1
 
-    
+
     # Input:    robot_odom  : Odometry()
     #           point        : Pose(), in vehicle frame
     # Return:   current_point  : Pose(), in world frame

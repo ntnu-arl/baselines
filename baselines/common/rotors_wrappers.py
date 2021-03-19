@@ -43,18 +43,17 @@ class RotorsWrappers:
 
         #LIDAR init
         self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 3)
+        pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
 
         state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
 
-        pcl_feature_high = 50 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
-        pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
-
         state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
         state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
 
-        #pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
-        #pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        #state_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
+        #state_low = -state_robot_high
 
         self.observation_space = spaces.Box(low=state_low, high=state_high, dtype=np.float32)
         self.reward_range = (-np.inf, np.inf)
@@ -103,7 +102,7 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -147,8 +146,8 @@ class RotorsWrappers:
         new_obs = self.get_new_obs()
 
         # draw lidar features
-        current_odom = self.robot_odom[0]
-        self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
+        #current_odom = self.robot_odom[0]
+        #self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
 
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
@@ -162,7 +161,7 @@ class RotorsWrappers:
 
         info = {'status':'none'}
         self.done = False
-        print(new_obs[6:14])
+        #print(new_obs[6:14])
         smallest_dist = np.amin(new_obs[6:14])
         reward_small_dist = exp(-(smallest_dist**2)/(0.9)) #r clearance (the distance to the closest obstacle)
 
@@ -202,7 +201,7 @@ class RotorsWrappers:
                 self.robot_velocity = np.delete(self.robot_velocity, (0), axis=0)
 
         #print("Distance from optimal path:", new_obs[6])
-        #print("Reward for this step:", reward)
+        print("Reward for this step:", reward)
 
         return (new_obs, reward, self.done, info)
 
@@ -213,7 +212,7 @@ class RotorsWrappers:
             #start_time = time.time()
             #self.pause()
 
-            pcl_features = np.full(PCL_FEATURE_SIZE, 10.0) #self.lidar_data.extracted_features #
+            pcl_features = self.lidar_data.extracted_features #np.full(PCL_FEATURE_SIZE, 10.0) #
             #self.unpause()
             #print("--- %s seconds ---" % (time.time() - start_time))
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
