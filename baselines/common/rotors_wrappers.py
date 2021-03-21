@@ -102,7 +102,7 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.40)
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -144,10 +144,6 @@ class RotorsWrappers:
 
         # get new obs
         new_obs = self.get_new_obs()
-
-        # draw lidar features
-        #current_odom = self.robot_odom[0]
-        #
 
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])

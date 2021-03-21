@@ -77,7 +77,6 @@ class LidarFeatureExtract:
         Create a sensor_msgs.PointCloud2 from an array
         of points and publishes it.
         '''
-
         msg = PointCloud2()
         if stamp:
             msg.header.stamp = stamp #rospy.Time.now()
