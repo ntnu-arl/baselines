@@ -16,7 +16,7 @@ from gym import core, spaces
 from gym.utils import seeding
 from baselines.common.lidar_feature_ext import LidarFeatureExtract
 
-from math import sqrt, atan2, sin, cos, exp
+import math
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -100,9 +100,9 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35)
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35) #0.35
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -117,9 +117,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 10.0)
+        self.goal_reward = rospy.get_param('goal_reward', 30.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 20.0)
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -145,10 +145,6 @@ class RotorsWrappers:
         # get new obs
         new_obs = self.get_new_obs()
 
-        # draw lidar features
-        #current_odom = self.robot_odom[0]
-        #
-
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
         Qx = self.Q_state.dot(new_obs[0:6])
@@ -161,9 +157,12 @@ class RotorsWrappers:
 
         info = {'status':'none'}
         self.done = False
+
         #print(new_obs[6:14])
         smallest_dist = np.amin(new_obs[6:14])
-        reward_small_dist = exp(-(smallest_dist**2)/(0.9)) #r clearance (the distance to the closest obstacle)
+        sigma = 0.4 #the higher this is the more negative reward when to close to obstacles
+        reward_small_dist = 1/(sigma*math.sqrt(2*math.pi))*math.exp(-(smallest_dist**2)/(2*sigma**2)) #r clearance (the distance to the closest obstacle)
+        #print(reward_small_dist)
 
         # reach goal?
         if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
@@ -172,7 +171,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx #- reward_small_dist
+            reward = reward - xT_Qx - reward_small_dist
 
         # collide?
         if self.collide:
@@ -466,7 +465,6 @@ class RotorsWrappers:
         self.goal_training_publisher.publish(goal)
         self.reset_timer(r * 3) #more time
 
-
         self.calculate_opt_trajectory_distance(start_pose.position)
 
         #reset lidar data
@@ -475,7 +473,6 @@ class RotorsWrappers:
         self.lidar_data.store_data = True
 
         obs = self.get_new_obs()
-
 
         return obs
 
@@ -493,8 +490,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([0.0, 0.0, 10.0], dtype=np.float32)
-            state_low = np.array([0.0, 0.0, 8.0], dtype=np.float32)
+            state_high = np.array([2.0, 1.0, 8.0], dtype=np.float32)
+            state_low = np.array([-2.0, -1.0, 5.0], dtype=np.float32)
+            #state_high = np.array([6.0, 5.0, 7.0], dtype=np.float32)
+            #state_low = np.array([6.0, 5.0, 7.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
@@ -710,7 +709,7 @@ class RotorsWrappers:
         for index, robo_coord in enumerate(robot_path):
             shortest_length = 1000
             for i, optimal_coord in enumerate(self.shortest_dist_line):
-                temp_length = sqrt((optimal_coord[0]-robo_coord[0])**2 + (optimal_coord[1]-robo_coord[1])**2 + (optimal_coord[2]-robo_coord[2])**2)
+                temp_length = math.sqrt((optimal_coord[0]-robo_coord[0])**2 + (optimal_coord[1]-robo_coord[1])**2 + (optimal_coord[2]-robo_coord[2])**2)
                 if temp_length < shortest_length:
                     shortest_length = temp_length
 
@@ -731,7 +730,7 @@ class RotorsWrappers:
         for i in range(len(length)):
             total_length_squared = length[i]**2 + total_length_squared
 
-        RMS = sqrt(total_length_squared/len(length))
+        RMS = math.sqrt(total_length_squared/len(length))
         return RMS
 
     def get_goal_coordinates(self, position):
