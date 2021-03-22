@@ -102,7 +102,11 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
+<<<<<<< HEAD
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35) #0.35
+=======
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.40)
+>>>>>>> 6ba65d8b00d73efec4ef462f28b2a04a736c9ac3
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
