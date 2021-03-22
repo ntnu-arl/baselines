@@ -30,6 +30,7 @@ class RotorsWrappers:
         rospy.init_node('rotors_wrapper', anonymous=True)
 
         self.current_goal = None
+        self.current_waypoint = None
         self.get_params()
 
         self.init_pose = None
@@ -83,6 +84,8 @@ class RotorsWrappers:
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
         self.pcl_feature_subscriber = rospy.Subscriber('/lidar_depth_feature', Float64MultiArray, self.pcl_feature_callback)
 
+        self.waypoint_subscriber = rospy.Subscriber('path_planner/waypoint', Pose, self.waypoint_callback)
+
         self.goal_training_publisher = rospy.Publisher("/delta/goal_training", Pose)
         self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
         self.goal_init_publisher = rospy.Publisher("/delta/goal", Pose)
@@ -100,7 +103,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 10.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.40)
         self.robot_collision_frame = rospy.get_param(
@@ -210,8 +213,7 @@ class RotorsWrappers:
             current_odom = self.robot_odom[0]
 
             pcl_features = self.lidar_data.extracted_features #np.full(PCL_FEATURE_SIZE, 10.0) #
-
-            goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
+            goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_waypoint)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
             goad_in_vehicle_frame.pose.pose.position.y,
             goad_in_vehicle_frame.pose.pose.position.z,
@@ -225,6 +227,9 @@ class RotorsWrappers:
         else:
             new_obs = None
         return new_obs
+
+    def waypoint_callback(self, msg):
+        self.current_waypoint = msg
 
     def odom_callback(self, msg):
         #print("received odom msg")
@@ -367,9 +372,9 @@ class RotorsWrappers:
         #     z = 0.5 - robot_z
 
         # rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
-        goal.position.x = x
-        goal.position.y = y
-        goal.position.z = z
+        goal.position.x = 0#x
+        goal.position.y = 7#y
+        goal.position.z = 0#z
         goal.orientation.x = 0
         goal.orientation.y = 0
         goal.orientation.z = 0
@@ -460,7 +465,8 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #more time
+        self.current_waypoint = goal
+        self.reset_timer(r * 2) #extend time
 
 
         self.calculate_opt_trajectory_distance(start_pose.position)
@@ -489,8 +495,8 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([0.0, 0.0, 10.0], dtype=np.float32)
-            state_low = np.array([0.0, 0.0, 8.0], dtype=np.float32)
+            state_high = np.array([0.0, 0.0, 6.0], dtype=np.float32)
+            state_low = np.array([0.0, 0.0, 6.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
