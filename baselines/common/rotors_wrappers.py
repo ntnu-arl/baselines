@@ -100,30 +100,27 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0) #4.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 8.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-<<<<<<< HEAD
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35) #0.35
-=======
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.40)
->>>>>>> 6ba65d8b00d73efec4ef462f28b2a04a736c9ac3
+
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.30) #0.35
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05])
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.4, 0.03, 0.03, 0.05]) #z was 1.0
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
-        self.R_action = rospy.get_param('R_action', [0.001, 0.001, 0.001])
+        self.R_action = rospy.get_param('R_action', [0.001, 0.001, 0.0009]) # z was 0.001
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 30.0)
+        self.goal_reward = rospy.get_param('goal_reward', 50.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 20.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 70.0)
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -162,14 +159,18 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
-        #print(new_obs[6:14])
-        smallest_dist = np.amin(new_obs[6:14])
-        sigma = 0.4 #the higher this is the more negative reward when to close to obstacles
-        reward_small_dist = 1/(sigma*math.sqrt(2*math.pi))*math.exp(-(smallest_dist**2)/(2*sigma**2)) #r clearance (the distance to the closest obstacle)
+        #clerance rewards
+        pc_features_obs = np.sort(new_obs[6:14]) #smallest dist is at index 0
+        sigmas = np.array([0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]) #the higher this is the more negative reward when to close to obstacles
+        reward_small_dist = 0
+        for i in range(len(pc_features_obs)):
+            #Sum clerance rewards to the closest obstacle
+            reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
+
         #print(reward_small_dist)
 
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.35): #0.3
             reward = reward + self.goal_reward
             self.done = False
             info = {'status':'reach goal'}
@@ -467,7 +468,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #more time
+        self.reset_timer(r * 2) #extend time
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -494,10 +495,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([2.0, 1.0, 8.0], dtype=np.float32)
-            state_low = np.array([-2.0, -1.0, 5.0], dtype=np.float32)
-            #state_high = np.array([6.0, 5.0, 7.0], dtype=np.float32)
-            #state_low = np.array([6.0, 5.0, 7.0], dtype=np.float32)
+            state_high = np.array([2.0, 1.0, 6.0], dtype=np.float32)
+            state_low = np.array([-2.0, -1.0, 3.0], dtype=np.float32)
+            #state_high = np.array([-8.0, -5.0, 5.0], dtype=np.float32)
+            #state_low = np.array([-8.0, -5.0, 5.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
@@ -567,7 +568,7 @@ class RotorsWrappers:
 
     def change_environment(self):
         self.pause_physics_proxy(EmptyRequest())
-        number_of_stat_objects = 10
+        number_of_stat_objects = 15
 
         for i in range(number_of_stat_objects):
             new_position = ModelState()
