@@ -103,18 +103,18 @@ class RotorsWrappers:
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 8.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.30) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35) #0.35
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.4, 0.03, 0.03, 0.05]) #z was 1.0
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.1, 0.03, 0.03, 0.05]) #z was 1.0
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
-        self.R_action = rospy.get_param('R_action', [0.001, 0.001, 0.0009]) # z was 0.001
+        self.R_action = rospy.get_param('R_action', [0.001, 0.001, 0.001]) # z was 0.001
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
@@ -161,7 +161,7 @@ class RotorsWrappers:
 
         #clerance rewards
         pc_features_obs = np.sort(new_obs[6:14]) #smallest dist is at index 0
-        sigmas = np.array([0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]) #the higher this is the more negative reward when to close to obstacles
+        sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]) #the higher this is the more negative reward when to close to obstacles
         reward_small_dist = 0
         for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
@@ -468,7 +468,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 2) #extend time
+        self.reset_timer(r * 3) #extend time
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -497,8 +497,8 @@ class RotorsWrappers:
             # randomize initial position (TODO: angle?, velocity?)
             state_high = np.array([2.0, 1.0, 6.0], dtype=np.float32)
             state_low = np.array([-2.0, -1.0, 3.0], dtype=np.float32)
-            #state_high = np.array([-8.0, -5.0, 5.0], dtype=np.float32)
-            #state_low = np.array([-8.0, -5.0, 5.0], dtype=np.float32)
+            #state_high = np.array([-8.0, -4.0, 5.0], dtype=np.float32)
+            #state_low = np.array([-8.0, -4.0, 5.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
