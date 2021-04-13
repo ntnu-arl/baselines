@@ -22,8 +22,9 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-#PCL_FEATURE_SIZE = 1440
-PCL_FEATURE_SIZE = 8
+PCL_STACK_SIZE = 1 #needs to be min 1
+PCL_SECTOR_SIZE = 8 #needs to be min 1 
+PCL_FEATURE_SIZE = PCL_STACK_SIZE * PCL_SECTOR_SIZE
 
 class RotorsWrappers:
     def __init__(self):
@@ -42,7 +43,7 @@ class RotorsWrappers:
         #                dtype=np.float32)
 
         #LIDAR init
-        self.lidar_data = LidarFeatureExtract(PCL_FEATURE_SIZE, 3)
+        self.lidar_data = LidarFeatureExtract(PCL_SECTOR_SIZE, PCL_STACK_SIZE, 3)
         pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
 
@@ -468,7 +469,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #extend time
+        self.reset_timer(r * 2) #extend time
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -495,10 +496,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([2.0, 1.0, 6.0], dtype=np.float32)
-            state_low = np.array([-2.0, -1.0, 3.0], dtype=np.float32)
-            #state_high = np.array([-8.0, -4.0, 5.0], dtype=np.float32)
-            #state_low = np.array([-8.0, -4.0, 5.0], dtype=np.float32)
+            #state_high = np.array([2.0, 1.0, 6.0], dtype=np.float32)
+            #state_low = np.array([-2.0, -1.0, 3.0], dtype=np.float32)
+            state_high = np.array([-2.0, 2.0, 5.0], dtype=np.float32)
+            state_low = np.array([-2.0, 2.0, 5.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
