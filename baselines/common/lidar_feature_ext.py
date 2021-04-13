@@ -13,7 +13,8 @@ import math
 
 class LidarFeatureExtract:
 
-    number_of_features = 8
+    sector_size = 8
+    stack_size = 3
     bach_size_pc = 10
     vis_pc = False
 
@@ -21,20 +22,20 @@ class LidarFeatureExtract:
         self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
         self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
         self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=1)
-        
+
         self.batch_last_samples = np.empty((0,3), np.float32)
         self.size_batch = 0
         self.bach_size_pc = bach_size_pc
 
         self.max_dist_search = 10.0
-        
+
         self.number_of_stacks = stack_size
         self.number_of_sectors = sector_size
-        self.number_of_features = sector_size * stack_size 
-        
+        self.number_of_features = sector_size * stack_size
+
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.extracted_features_points = np.empty((0,3), np.int32)
-        
+
         self.store_data = False
         self.vis_pc = False
 
@@ -117,11 +118,11 @@ class LidarFeatureExtract:
             for n in range(self.number_of_sectors):
                 if (len(index_sector[n]) > 0):
                     sector = np.delete(pc, np.array(index_sector[n]), 0)
-                    
+
                     if self.number_of_stacks > 1:
                         #divide sectors in stacks along z axis
                         index_stack = self.subdivde_sector_to_stacks(sector)
-                        
+
                         for k in range(self.number_of_stacks):
                             if (len(index_stack[k]) > 0):
                                 stack = np.delete(sector, np.array(index_stack[k]), 0)
@@ -137,7 +138,7 @@ class LidarFeatureExtract:
                                 self.extracted_features[feature_index] = self.max_dist_search
 
                             feature_index += 1
-                    
+
                     else:
                         #divide pcl only into sectors
                         #self.vis_points(sector)
@@ -149,8 +150,6 @@ class LidarFeatureExtract:
                             self.extracted_features[n] = self.max_dist_search
                 else:
                     self.extracted_features[n] = self.max_dist_search
-            
-            print(self.extracted_features)
 
         else:
             self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
@@ -162,7 +161,7 @@ class LidarFeatureExtract:
         '''
         Clean all stored samples and set to init values
         '''
-        self.batch_last_samples = np.empty((0,3), np.float32) #np.full((1,3), -100.0) 
+        self.batch_last_samples = np.empty((0,3), np.float32) #np.full((1,3), -100.0)
         self.extracted_features_points = np.empty((1,3), np.int32)
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.size_batch = 0
@@ -171,8 +170,8 @@ class LidarFeatureExtract:
         marker.action = marker.DELETEALL
         markerArray.markers.append(marker)
         self.pc_features_publisher.publish(markerArray)
-    
-    
+
+
     def subdivde_sector_to_stacks(self, sector):
         #[min max] [73 107] grader
         '''
@@ -184,15 +183,15 @@ class LidarFeatureExtract:
 
         for xyz in sector:
             r = math.sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)
-            phi = math.acos(xyz[2]/r)            
+            phi = math.acos(xyz[2]/r)
             phi_bound = math.pi/self.number_of_stacks
 
             for stackN in range(self.number_of_stacks):
-                if phi < stackN*phi_bound or phi >= (stackN+1)*phi_bound: 
+                if phi < stackN*phi_bound or phi >= (stackN+1)*phi_bound:
                     index_stack[stackN].append(i)
 
             i += 1
-            
+
         return index_stack
 
 
@@ -212,7 +211,7 @@ class LidarFeatureExtract:
 
             #phi = math.acos(xyz[2]/r)  # 90 deg is planar with rmf
             #phi_bound = math.pi*(15/24) #phi boundary set to ca 113 deg
-            
+
 
             for sliceN in range(self.number_of_features):
                 if (theta < sliceN*pi_div or theta >= (sliceN+1)*pi_div): # and phi < phi_bound

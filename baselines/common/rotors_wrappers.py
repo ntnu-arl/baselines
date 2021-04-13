@@ -22,8 +22,8 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-PCL_STACK_SIZE = 1 #needs to be min 1
-PCL_SECTOR_SIZE = 8 #needs to be min 1 
+PCL_STACK_SIZE = 3 #needs to be min 1
+PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_STACK_SIZE * PCL_SECTOR_SIZE
 
 class RotorsWrappers:
@@ -101,7 +101,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 8.0) #4.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35) #0.35
@@ -111,7 +111,7 @@ class RotorsWrappers:
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.1, 0.03, 0.03, 0.05]) #z was 1.0
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05]) #z was 1.0
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
@@ -119,9 +119,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 50.0)
+        self.goal_reward = rospy.get_param('goal_reward', 10.0) #50
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 70.0)
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0) #70
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -177,7 +177,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx - reward_small_dist
+            reward = reward - xT_Qx# - reward_small_dist
 
         # collide?
         if self.collide:
