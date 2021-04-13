@@ -469,7 +469,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 2) #extend time
+        self.reset_timer(r * 3) #extend time
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -496,10 +496,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            #state_high = np.array([2.0, 1.0, 6.0], dtype=np.float32)
-            #state_low = np.array([-2.0, -1.0, 3.0], dtype=np.float32)
-            state_high = np.array([-2.0, 2.0, 5.0], dtype=np.float32)
-            state_low = np.array([-2.0, 2.0, 5.0], dtype=np.float32)
+            state_high = np.array([2.0, 1.0, 6.0], dtype=np.float32)
+            state_low = np.array([-2.0, -1.0, 3.0], dtype=np.float32)
+            #state_high = np.array([-2.0, 2.0, 5.0], dtype=np.float32)
+            #state_low = np.array([-2.0, 2.0, 5.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
