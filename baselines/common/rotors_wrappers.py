@@ -162,7 +162,12 @@ class RotorsWrappers:
 
         #clerance rewards
         pc_features_obs = np.sort(new_obs[6:14]) #smallest dist is at index 0
-        sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]) #the higher this is the more negative reward when to close to obstacles
+        
+        #the higher this is the more negative reward when to close to obstacles
+        sigmas_small = np.full(28, 0.4)
+        sigmas = np.array([0.5, 0.45, 0.45, 0.44])
+        sigmas = np.concatenate((sigmas, sigmas_small), axis=None)
+        #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]) 
         reward_small_dist = 0
         for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
