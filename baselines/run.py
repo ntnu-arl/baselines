@@ -221,6 +221,7 @@ def main(args):
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
 
+    show_in_rviz = False
     analyze_plots = False
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
@@ -232,8 +233,7 @@ def main(args):
 
     model, env = train(args, extra_args)
 
-    env.set_data_vis(analyze_plots)
-    analyze_plots = False
+    env.set_data_vis(show_in_rviz)
 
     if args.save_path is not None and rank == 0:
         save_path = osp.expanduser(args.save_path)
@@ -266,7 +266,7 @@ def main(args):
             if new_goal:
                 reach_goal_trajectory = np.array([])
                 new_goal = False
-                env.change_environment()
+                #env.change_environment()
 
             if state is not None:
                 actions, _, state, _ = model.step(obs)
