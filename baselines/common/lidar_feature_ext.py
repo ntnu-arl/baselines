@@ -173,21 +173,33 @@ class LidarFeatureExtract:
 
 
     def subdivde_sector_to_stacks(self, sector):
-        #[min max] [73 107] grader
         '''
-        Divdes sector of points in equal stacks a long the z - axiz
+        Divdes sector of points in equal stacks along the z - axiz.
+        Using sphere coordinates: phi = [0 pi] rad. 
+        We only find and store indexes to speed up computation.
         '''
         i = 0
         index_stack = [[] for _ in range(self.number_of_stacks)]
-        stack1 = np.empty((0,3), np.int32)
 
+        #most points in the pcl are in between [70 110] deg  
+        upper_clip = math.pi - 11/18*math.pi #180 - 110 = 70 deg
+        lower_clip = 7/18*math.pi #70 deg
+        upper_boundary = 0
+        
         for xyz in sector:
             r = math.sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)
             phi = math.acos(xyz[2]/r)
-            phi_bound = math.pi/self.number_of_stacks
+            #setting boundary for where the pcl should be divided
+            phi_bound = (math.pi - lower_clip - upper_clip)/self.number_of_stacks
 
             for stackN in range(self.number_of_stacks):
-                if phi < stackN*phi_bound or phi >= (stackN+1)*phi_bound:
+                if stackN == self.number_of_stacks - 1:
+                    #need to only set upper boundary at the last stack 
+                    upper_boundary = upper_clip 
+                else: 
+                    upper_boundary = 0
+                
+                if phi < stackN*(phi_bound) + lower_clip or phi >= (stackN+1)*phi_bound + lower_clip + upper_boundary:
                     index_stack[stackN].append(i)
 
             i += 1
@@ -197,7 +209,8 @@ class LidarFeatureExtract:
 
     def subdivide_pointcloud_to_sectors(self, pc):
         '''
-        Divdes sphere of points in equal sectors
+        Divdes sphere of points in equal sectors using sphere coordinates.
+        We only find and store indexes to speed up computation.
         '''
         i = 0
         index_sector = [[] for _ in range(self.number_of_features)]
@@ -207,14 +220,10 @@ class LidarFeatureExtract:
             theta = (theta + 2*math.pi) % (2*math.pi)
 
             r = math.sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)
-            pi_div = 2*math.pi/self.number_of_features #speed up comp
-
-            #phi = math.acos(xyz[2]/r)  # 90 deg is planar with rmf
-            #phi_bound = math.pi*(15/24) #phi boundary set to ca 113 deg
-
+            pi_div = 2*math.pi/self.number_of_features 
 
             for sliceN in range(self.number_of_features):
-                if (theta < sliceN*pi_div or theta >= (sliceN+1)*pi_div): # and phi < phi_bound
+                if (theta < sliceN*pi_div or theta >= (sliceN+1)*pi_div): 
                     index_sector[sliceN].append(i)
                     continue
 
@@ -224,6 +233,15 @@ class LidarFeatureExtract:
 
 
     def get_distance_to_closest_point(self, xyz):
+        '''
+        Finds the closest distance (and the point) to the rmf with respect to the rmf frame  
+        
+        Input:    xyz  : np.array (dim: N x 3)
+
+        Output: np.min(r) : int #closest distance
+                xyz[index[0][0]] : np.array (dim: 1 x 3) #closest point 
+
+        '''
         r = np.linalg.norm(xyz, axis=-1)
         index = np.where(r == np.min(r))
 
@@ -235,7 +253,7 @@ class LidarFeatureExtract:
         We want to visualize the pc points extracted and used
         as states in rviz.
         Input:    robot_odom  : Odometry() #for transformation purposes
-                  pc_points   : np.array (self.number_of_features x 3) #all feature points
+                  pc_points   : np.array (dim: self.number_of_features x 3) #all feature points
         '''
         markerArray = MarkerArray()
         MARKERS_MAX = self.number_of_features
@@ -319,11 +337,14 @@ class LidarFeatureExtract:
         return current_point
 
     def set_vis_in_rviz(self, set):
+        '''
+        Visualize points with rviz
+        '''
         self.vis_pc = set
 
     def vis_points(self, pc):
         '''
-        visualize points with open3d
+        Visualize points with open3d
         '''
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pc)
