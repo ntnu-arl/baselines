@@ -597,6 +597,41 @@ class RotorsWrappers:
             time.sleep(0.03) # since there is no ros wall rate option i python... (need time between diff pub)
 
         self.unpause_physics_proxy(EmptyRequest())
+    
+    def change_environment_different_shapes(self):
+        self.pause_physics_proxy(EmptyRequest())
+        number_of_stat_objects = 12
+
+        for i in range(number_of_stat_objects):
+            new_position = ModelState()
+            
+            if i >= 0 and i < 3:
+                new_position.model_name = 'easySimple Block' + str(i)
+            if i >= 3 and i < 6:
+                new_position.model_name = 'easySimple Pyramid' + str(i)
+            if i >= 6 and i < 9:
+                new_position.model_name = 'easySimple Stone' + str(i)
+            if i >= 9 and i < 12:
+                new_position.model_name = 'easySimple U' + str(i)
+            
+            new_position.reference_frame = 'world'
+
+            # randomize initial position
+            state_high = np.array([10.0, 10.0, 0], dtype=np.float32)
+            state_low = np.array([-10.0, -10.0, 0], dtype=np.float32)
+            state_init = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
+            new_position.pose.position.x, x2 = state_init[0], state_init[0]
+            new_position.pose.position.y, y2 = state_init[1], state_init[1]
+            new_position.pose.position.z, z2 = state_init[2], state_init[2]
+            new_position.pose.orientation.x = 0
+            new_position.pose.orientation.y = 0
+            new_position.pose.orientation.z = 0
+            new_position.pose.orientation.w = 1
+
+            self.model_state_publisher.publish(new_position)
+            time.sleep(0.03) # since there is no ros wall rate option i python... (need time between diff pub)
+
+        self.unpause_physics_proxy(EmptyRequest())
 
 
     def position_xyz_response(self):
