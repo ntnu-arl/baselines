@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 PCL_STACK_SIZE = 3 #needs to be min 1
-PCL_SECTOR_SIZE = 4 #needs to be min 1
+PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_STACK_SIZE * PCL_SECTOR_SIZE
 
 class RotorsWrappers:
@@ -104,7 +104,7 @@ class RotorsWrappers:
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.30) #0.35
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -161,13 +161,13 @@ class RotorsWrappers:
         self.done = False
 
         #clerance rewards
-        pc_features_obs = np.sort(new_obs[6:14]) #smallest dist is at index 0
-        
+        pc_features_obs = np.sort(new_obs[6:(PCL_FEATURE_SIZE + 6)]) #smallest dist is at index 0
+
         #the higher this is the more negative reward when to close to obstacles
-        sigmas_small = np.full(28, 0.4)
+        sigmas_small = np.full(PCL_FEATURE_SIZE - 4, 0.4)
         sigmas = np.array([0.5, 0.45, 0.45, 0.44])
         sigmas = np.concatenate((sigmas, sigmas_small), axis=None)
-        #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]) 
+        #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
         reward_small_dist = 0
         for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
@@ -176,13 +176,13 @@ class RotorsWrappers:
         #print(reward_small_dist)
 
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.35): #0.3
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3): #0.35
             reward = reward + self.goal_reward
             self.done = False
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx# - reward_small_dist
+            reward = reward - xT_Qx # - reward_small_dist
 
         # collide?
         if self.collide:
@@ -501,10 +501,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([2.0, 1.0, 6.0], dtype=np.float32)
-            state_low = np.array([-2.0, -1.0, 3.0], dtype=np.float32)
-            #state_high = np.array([-2.0, 2.0, 5.0], dtype=np.float32)
-            #state_low = np.array([-2.0, 2.0, 5.0], dtype=np.float32)
+            state_high = np.array([2.0, 1.0, 8.0], dtype=np.float32)
+            state_low = np.array([-2.0, -1.0, 5.0], dtype=np.float32)
+            #state_high = np.array([9.0, -9.0, 5.0], dtype=np.float32)
+            #state_low = np.array([9.0, -9.0, 5.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
@@ -597,14 +597,14 @@ class RotorsWrappers:
             time.sleep(0.03) # since there is no ros wall rate option i python... (need time between diff pub)
 
         self.unpause_physics_proxy(EmptyRequest())
-    
+
     def change_environment_different_shapes(self):
         self.pause_physics_proxy(EmptyRequest())
         number_of_stat_objects = 12
 
         for i in range(number_of_stat_objects):
             new_position = ModelState()
-            
+
             if i >= 0 and i < 3:
                 new_position.model_name = 'easySimple Block' + str(i)
             if i >= 3 and i < 6:
@@ -613,7 +613,7 @@ class RotorsWrappers:
                 new_position.model_name = 'easySimple Stone' + str(i)
             if i >= 9 and i < 12:
                 new_position.model_name = 'easySimple U' + str(i)
-            
+
             new_position.reference_frame = 'world'
 
             # randomize initial position
