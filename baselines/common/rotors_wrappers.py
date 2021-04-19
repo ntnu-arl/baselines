@@ -143,7 +143,7 @@ class RotorsWrappers:
         uT_Ru = action.transpose().dot(Ru) / 250.0
         reward = - uT_Ru
         #reward = -0.01
-
+        print(new_obs[0:6])
         info = {'status':'none'}
         self.done = False
 
@@ -158,7 +158,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx - path_reward 
+            reward = reward - xT_Qx #- path_reward
             #pass
 
         # collide?
