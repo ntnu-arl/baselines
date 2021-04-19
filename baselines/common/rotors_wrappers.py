@@ -22,7 +22,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-PCL_STACK_SIZE = 3 #needs to be min 1
+PCL_STACK_SIZE = 1 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_STACK_SIZE * PCL_SECTOR_SIZE
 
@@ -147,6 +147,11 @@ class RotorsWrappers:
         # get new obs
         new_obs = self.get_new_obs()
 
+        print("::::::::::::::")
+        print(self.lidar_data.number_of_features)
+        print("Obs:")
+        print(new_obs[0:6])
+        print("::::::::::::::")
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
         Qx = self.Q_state.dot(new_obs[0:6])
