@@ -101,10 +101,10 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0) #4.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.30) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25) #0.35
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -163,15 +163,15 @@ class RotorsWrappers:
         #clerance rewards
         pc_features_obs = np.sort(new_obs[6:(PCL_FEATURE_SIZE + 6)]) #smallest dist is at index 0
 
-        #the higher this is the more negative reward when to close to obstacles
-        sigmas_small = np.full(PCL_FEATURE_SIZE - 4, 0.4)
+        #the higher this is, the more negative reward when to close to obstacles
         sigmas = np.array([0.5, 0.45, 0.45, 0.44])
+        sigmas_small = np.full(PCL_FEATURE_SIZE - len(sigmas), 0.4)
         sigmas = np.concatenate((sigmas, sigmas_small), axis=None)
         #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
         reward_small_dist = 0
-        for i in range(len(pc_features_obs)):
+        #for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
-            reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
+        #    reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
 
         #print(reward_small_dist)
 
@@ -183,6 +183,7 @@ class RotorsWrappers:
             print('reach goal!')
         else:
             reward = reward - xT_Qx # - reward_small_dist
+            pass
 
         # collide?
         if self.collide:
@@ -223,8 +224,6 @@ class RotorsWrappers:
         if (len(self.robot_odom) > 0):
             current_odom = self.robot_odom[0]
 
-            pcl_features = self.lidar_data.extracted_features #np.full(PCL_FEATURE_SIZE, 10.0) #
-
             goad_in_vehicle_frame, robot_euler_angles = self.transform_goal_to_vehicle_frame(current_odom, self.current_goal)
             new_obs = np.array([goad_in_vehicle_frame.pose.pose.position.x,
             goad_in_vehicle_frame.pose.pose.position.y,
@@ -232,7 +231,11 @@ class RotorsWrappers:
             goad_in_vehicle_frame.twist.twist.linear.x,
             goad_in_vehicle_frame.twist.twist.linear.y,
             goad_in_vehicle_frame.twist.twist.linear.z])
+
+            pcl_features = self.lidar_data.extracted_features
+            #pcl_features = np.full(PCL_FEATURE_SIZE, 10.0)
             new_obs = np.concatenate((new_obs, pcl_features), axis=None)
+            #print(new_obs)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
 

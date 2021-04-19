@@ -1,4 +1,5 @@
 import rospy
+import time
 from sensor_msgs.msg import PointCloud2, PointField
 from sensor_msgs.point_cloud2 import read_points
 from visualization_msgs.msg import Marker
@@ -108,7 +109,7 @@ class LidarFeatureExtract:
 
         self.pc_data_stored.publish(msg)
 
-
+    '''
     def extracted_lidar_features(self):
         self.extracted_features_points = np.empty((1,3), np.int32)
         if self.batch_last_samples.size > 0:
@@ -148,13 +149,34 @@ class LidarFeatureExtract:
                             self.extracted_features[feature_index] = self.max_dist_search
 
                     else:
-                        #no sector found so we create init features
+                        #no sector found so we set init feature
                         self.extracted_features[feature_index] = self.max_dist_search
 
                     feature_index += 1
 
         else:
             #no pcl found so we create init features
+            self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
+    '''
+
+    def extracted_lidar_features(self):
+        self.extracted_features_points = np.empty((1,3), np.int32)
+        if self.batch_last_samples.size > 0:
+            pc = self.batch_last_samples #needed this due to concurrency issues
+            index_sector = self.subdivide_pointcloud_to_sectors(pc)
+            for n in range(self.number_of_sectors):
+                if (len(index_sector[n]) > 0):
+                    sector = np.delete(pc, np.array(index_sector[n]), 0)
+                    #self.vis_points(self.batch_last_samples)
+                    if sector.size > 0:
+                        distance, closesd_p = self.get_distance_to_closest_point(sector)
+                        self.extracted_features[n] = distance
+                        self.extracted_features_points = np.vstack([self.extracted_features_points, closesd_p])
+                    else:
+                        self.extracted_features[n] = self.max_dist_search
+                else:
+                    self.extracted_features[n] = self.max_dist_search
+        else:
             self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
 
 
