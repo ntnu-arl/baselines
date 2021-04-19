@@ -22,9 +22,9 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-PCL_STACK_SIZE = 3 #needs to be min 1
+#PCL_STACK_SIZE = 1 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
-PCL_FEATURE_SIZE = PCL_STACK_SIZE * PCL_SECTOR_SIZE
+PCL_FEATURE_SIZE = PCL_SECTOR_SIZE #* PCL_STACK_SIZE 
 
 class RotorsWrappers:
     def __init__(self):
@@ -43,7 +43,7 @@ class RotorsWrappers:
         #                dtype=np.float32)
 
         #LIDAR init
-        self.lidar_data = LidarFeatureExtract(PCL_SECTOR_SIZE, PCL_STACK_SIZE, 3)
+        self.lidar_data = LidarFeatureExtract(PCL_SECTOR_SIZE, 3)
         pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
 
@@ -161,14 +161,14 @@ class RotorsWrappers:
         self.done = False
 
         #clerance rewards
-        pc_features_obs = np.sort(new_obs[6:(PCL_FEATURE_SIZE + 6)]) #smallest dist is at index 0
+        #pc_features_obs = np.sort(new_obs[6:(PCL_FEATURE_SIZE + 6)]) #smallest dist is at index 0
 
         #the higher this is, the more negative reward when to close to obstacles
-        sigmas = np.array([0.5, 0.45, 0.45, 0.44])
-        sigmas_small = np.full(PCL_FEATURE_SIZE - len(sigmas), 0.4)
-        sigmas = np.concatenate((sigmas, sigmas_small), axis=None)
+        #sigmas = np.array([0.5, 0.45, 0.45, 0.44])
+        #sigmas_small = np.full(PCL_FEATURE_SIZE - len(sigmas), 0.4)
+        #sigmas = np.concatenate((sigmas, sigmas_small), axis=None)
         #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
-        reward_small_dist = 0
+        #reward_small_dist = 0
         #for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
         #    reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
@@ -504,8 +504,8 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([2.0, 1.0, 8.0], dtype=np.float32)
-            state_low = np.array([-2.0, -1.0, 5.0], dtype=np.float32)
+            state_high = np.array([0.0, 0.0, 8.0], dtype=np.float32)
+            state_low = np.array([0.0, 0.0, 5.0], dtype=np.float32)
             #state_high = np.array([9.0, -9.0, 5.0], dtype=np.float32)
             #state_low = np.array([9.0, -9.0, 5.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))

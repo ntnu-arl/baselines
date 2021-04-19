@@ -15,11 +15,11 @@ import math
 class LidarFeatureExtract:
 
     sector_size = 8
-    stack_size = 3
+    #stack_size = 3
     bach_size_pc = 10
     vis_pc = False
 
-    def __init__(self, sector_size, stack_size, bach_size_pc):
+    def __init__(self, sector_size, bach_size_pc):
         self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
         self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
         self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=1)
@@ -30,9 +30,9 @@ class LidarFeatureExtract:
 
         self.max_dist_search = 10.0
 
-        self.number_of_stacks = stack_size
+        #self.number_of_stacks = stack_size
         self.number_of_sectors = sector_size
-        self.number_of_features = sector_size * stack_size
+        self.number_of_features = sector_size #* stack_size
 
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.extracted_features_points = np.empty((0,3), np.int32)
@@ -193,14 +193,14 @@ class LidarFeatureExtract:
         marker.action = marker.DELETEALL
         markerArray.markers.append(marker)
         self.pc_features_publisher.publish(markerArray)
-
-
+    
+    '''
     def subdivde_sector_to_stacks(self, sector):
-        '''
-        Divdes sector of points in equal stacks along the z - axiz.
-        Using sphere coordinates: phi = [0 pi] rad.
-        We only find and store indexes to speed up computation.
-        '''
+    '''
+        #Divdes sector of points in equal stacks along the z - axiz.
+        #Using sphere coordinates: phi = [0 pi] rad.
+        #We only find and store indexes to speed up computation.
+    '''
         i = 0
         index_stack = [[] for _ in range(self.number_of_stacks)]
 
@@ -228,6 +228,7 @@ class LidarFeatureExtract:
             i += 1
 
         return index_stack
+    '''
 
 
     def subdivide_pointcloud_to_sectors(self, pc):
