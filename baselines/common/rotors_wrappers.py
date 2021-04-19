@@ -147,11 +147,6 @@ class RotorsWrappers:
         # get new obs
         new_obs = self.get_new_obs()
 
-        print("::::::::::::::")
-        print(self.lidar_data.number_of_features)
-        print("Obs:")
-        print(new_obs[0:6])
-        print("::::::::::::::")
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
         Qx = self.Q_state.dot(new_obs[0:6])
