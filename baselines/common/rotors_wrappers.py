@@ -22,9 +22,9 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-#PCL_STACK_SIZE = 1 #needs to be min 1
+PCL_STACK_SIZE = 3 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
-PCL_FEATURE_SIZE = PCL_SECTOR_SIZE #* PCL_STACK_SIZE 
+PCL_FEATURE_SIZE = PCL_SECTOR_SIZE * PCL_STACK_SIZE
 
 class RotorsWrappers:
     def __init__(self):
@@ -43,7 +43,7 @@ class RotorsWrappers:
         #                dtype=np.float32)
 
         #LIDAR init
-        self.lidar_data = LidarFeatureExtract(PCL_SECTOR_SIZE, 3)
+        self.lidar_data = LidarFeatureExtract(PCL_SECTOR_SIZE, PCL_STACK_SIZE, 3)
         pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
 
@@ -104,7 +104,7 @@ class RotorsWrappers:
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.3) #0.35
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -119,9 +119,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 10.0) #50
+        self.goal_reward = rospy.get_param('goal_reward', 50.0) #50
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0) #70
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 30.0) #70
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -147,11 +147,6 @@ class RotorsWrappers:
         # get new obs
         new_obs = self.get_new_obs()
 
-        print("::::::::::::::")
-        print(self.lidar_data.number_of_features)
-        print("Obs:")
-        print(new_obs[0:6])
-        print("::::::::::::::")
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
         Qx = self.Q_state.dot(new_obs[0:6])
@@ -166,18 +161,18 @@ class RotorsWrappers:
         self.done = False
 
         #clerance rewards
-        #pc_features_obs = np.sort(new_obs[6:(PCL_FEATURE_SIZE + 6)]) #smallest dist is at index 0
+        pc_features_obs = np.sort(new_obs[6:(PCL_FEATURE_SIZE + 6)]) #smallest dist is at index 0
 
         #the higher this is, the more negative reward when to close to obstacles
-        #sigmas = np.array([0.5, 0.45, 0.45, 0.44])
-        #sigmas_small = np.full(PCL_FEATURE_SIZE - len(sigmas), 0.4)
-        #sigmas = np.concatenate((sigmas, sigmas_small), axis=None)
+        sigmas1 = np.array([0.5, 0.45, 0.45, 0.44])
+        sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.4)
+        sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
         #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
-        #reward_small_dist = 0
-        #for i in range(len(pc_features_obs)):
+        reward_small_dist = 0
+        for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
-        #    reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
-
+            reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
+        reward_small_dist = 0
         #print(reward_small_dist)
 
         # reach goal?
@@ -189,6 +184,7 @@ class RotorsWrappers:
         else:
             reward = reward - xT_Qx # - reward_small_dist
             pass
+
 
         # collide?
         if self.collide:
@@ -222,6 +218,7 @@ class RotorsWrappers:
 
         #print("Distance from optimal path:", new_obs[6])
         #print("Reward for this step:", reward)
+        #print("Obs for this step:", new_obs[0:6])
 
         return (new_obs, reward, self.done, info)
 
@@ -606,6 +603,7 @@ class RotorsWrappers:
 
         self.unpause_physics_proxy(EmptyRequest())
 
+    '''
     def change_environment_different_shapes(self):
         self.pause_physics_proxy(EmptyRequest())
         number_of_stat_objects = 12
@@ -640,7 +638,7 @@ class RotorsWrappers:
             time.sleep(0.03) # since there is no ros wall rate option i python... (need time between diff pub)
 
         self.unpause_physics_proxy(EmptyRequest())
-
+    '''
 
     def position_xyz_response(self):
         fig,ax = plt.subplots(3,1,clear=True)

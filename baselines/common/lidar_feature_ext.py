@@ -19,7 +19,7 @@ class LidarFeatureExtract:
     bach_size_pc = 10
     vis_pc = False
 
-    def __init__(self, sector_size, bach_size_pc):
+    def __init__(self, sector_size, stack_size, bach_size_pc):
         self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
         self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
         self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=1)
@@ -30,9 +30,9 @@ class LidarFeatureExtract:
 
         self.max_dist_search = 10.0
 
-        #self.number_of_stacks = stack_size
+        self.number_of_stacks = stack_size
         self.number_of_sectors = sector_size
-        self.number_of_features = sector_size #* stack_size
+        self.number_of_features = sector_size * stack_size
 
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.extracted_features_points = np.empty((0,3), np.int32)
@@ -109,7 +109,7 @@ class LidarFeatureExtract:
 
         self.pc_data_stored.publish(msg)
 
-    '''
+
     def extracted_lidar_features(self):
         self.extracted_features_points = np.empty((1,3), np.int32)
         if self.batch_last_samples.size > 0:
@@ -121,7 +121,7 @@ class LidarFeatureExtract:
                 index_sector = self.subdivide_pointcloud_to_sectors(pc)
 
             for n in range(self.number_of_sectors):
-                if self.number_of_sectors > 1 and (len(index_sector[n]) > 0):
+                if (len(index_sector[n]) > 0):
                     sector = np.delete(pc, np.array(index_sector[n]), 0)
                 else:
                     #all points lies in one sector
@@ -175,10 +175,12 @@ class LidarFeatureExtract:
                     else:
                         self.extracted_features[n] = self.max_dist_search
                 else:
+                    #no sector found so we set init feature
                     self.extracted_features[n] = self.max_dist_search
         else:
+            #no pcl found so we create init features
             self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
-
+    '''
 
     def reset_lidar_storage(self):
         '''
@@ -193,14 +195,14 @@ class LidarFeatureExtract:
         marker.action = marker.DELETEALL
         markerArray.markers.append(marker)
         self.pc_features_publisher.publish(markerArray)
-    
-    '''
+
+
     def subdivde_sector_to_stacks(self, sector):
-    '''
-        #Divdes sector of points in equal stacks along the z - axiz.
-        #Using sphere coordinates: phi = [0 pi] rad.
-        #We only find and store indexes to speed up computation.
-    '''
+        '''
+        Divdes sector of points in equal stacks along the z - axiz.
+        Using sphere coordinates: phi = [0 pi] rad.
+        We only find and store indexes to speed up computation.
+        '''
         i = 0
         index_stack = [[] for _ in range(self.number_of_stacks)]
 
@@ -228,7 +230,7 @@ class LidarFeatureExtract:
             i += 1
 
         return index_stack
-    '''
+
 
 
     def subdivide_pointcloud_to_sectors(self, pc):
