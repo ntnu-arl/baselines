@@ -172,7 +172,6 @@ class RotorsWrappers:
         for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
             reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
-        reward_small_dist = 0
         #print(reward_small_dist)
 
         # reach goal?
@@ -182,7 +181,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx # - reward_small_dist
+            reward = reward - xT_Qx - reward_small_dist
             pass
 
 
@@ -218,7 +217,7 @@ class RotorsWrappers:
 
         #print("Distance from optimal path:", new_obs[6])
         #print("Reward for this step:", reward)
-        #print("Obs for this step:", new_obs[0:6])
+        #print("Obs for this step:", new_obs)
 
         return (new_obs, reward, self.done, info)
 
@@ -506,8 +505,8 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([0.0, 0.0, 8.0], dtype=np.float32)
-            state_low = np.array([0.0, 0.0, 5.0], dtype=np.float32)
+            state_high = np.array([0.0, 0.0, 9.0], dtype=np.float32)
+            state_low = np.array([0.0, 0.0, 6.0], dtype=np.float32)
             #state_high = np.array([9.0, -9.0, 5.0], dtype=np.float32)
             #state_low = np.array([9.0, -9.0, 5.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
