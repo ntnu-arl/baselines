@@ -109,7 +109,7 @@ class LidarFeatureExtract:
 
         self.pc_data_stored.publish(msg)
 
-
+    #this function is ugly as fuck. Do something about it.
     def extracted_lidar_features(self):
         self.extracted_features_points = np.empty((1,3), np.int32)
         if self.batch_last_samples.size > 0:
