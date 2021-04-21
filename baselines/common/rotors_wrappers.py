@@ -101,10 +101,10 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0) #4.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.3) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25) #0.35
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -172,6 +172,7 @@ class RotorsWrappers:
         for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
             reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
+
         #print(reward_small_dist)
 
         # reach goal?

@@ -221,7 +221,7 @@ def main(args):
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
 
-    show_in_rviz = True
+    show_in_rviz = False
     analyze_plots = False
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
