@@ -15,7 +15,7 @@ import math
 class LidarFeatureExtract:
 
     sector_size = 8
-    #stack_size = 3
+    stack_size = 3
     bach_size_pc = 10
     vis_pc = False
 
@@ -48,19 +48,16 @@ class LidarFeatureExtract:
         if xyz.size > 0 and self.store_data:
             xyz = self.filter_points(xyz, -self.max_dist_search, self.max_dist_search)
 
-            if xyz.size > 0:
+            if self.size_batch >= self.bach_size_pc:
+                #self.vis_points(self.batch_last_samples)
+                self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
 
+            self.batch_last_samples = np.vstack([self.batch_last_samples, xyz])
+            xyz = np.empty((0,3), np.int32)
 
-                if self.size_batch >= self.bach_size_pc:
-                    #self.vis_points(self.batch_last_samples)
-                    self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
+            self.extracted_lidar_features()
 
-                self.batch_last_samples = np.vstack([self.batch_last_samples, xyz])
-                xyz = np.empty((0,3), np.int32)
-
-                self.extracted_lidar_features()
-
-                self.size_batch += 1
+            self.size_batch += 1
 
         #visualize the filtered points in rviz
         if self.vis_pc:
@@ -109,8 +106,11 @@ class LidarFeatureExtract:
 
         self.pc_data_stored.publish(msg)
 
-    #this function is ugly as fuck. Do something about it.
+
     def extracted_lidar_features(self):
+        '''
+        We run through the entire pcl and find all sectors and stacks
+        '''
         self.extracted_features_points = np.empty((1,3), np.int32)
         if self.batch_last_samples.size > 0:
             pc = self.batch_last_samples #make copy. Needed this due to concurrency issues
@@ -132,55 +132,37 @@ class LidarFeatureExtract:
                     index_stack = self.subdivde_sector_to_stacks(sector)
 
                 for k in range(self.number_of_stacks):
-                    if (len(index_sector[n]) > 0):
-                        if self.number_of_stacks > 1 and len(index_stack[k]) > 0:
-                            stack = np.delete(sector, np.array(index_stack[k]), 0)
-                        else:
-                            #all points lies in one stack
-                            stack = sector
-
-                        pcl = stack
-
-                        if (sector.size > 0 and self.number_of_stacks <= 1) or (stack.size > 0 and self.number_of_stacks > 1):
-                            distance, closesd_p = self.get_distance_to_closest_point(pcl)
-                            self.extracted_features[feature_index] = distance
-                            self.extracted_features_points = np.vstack([self.extracted_features_points, closesd_p])
-                        else:
-                            self.extracted_features[feature_index] = self.max_dist_search
-
-                    else:
-                        #no sector found so we set init feature
-                        self.extracted_features[feature_index] = self.max_dist_search
+                    self.create_pcl_feature_vector(sector, index_sector, index_stack, n, k, feature_index)
 
                     feature_index += 1
 
         else:
-            #no pcl found so we create init features
+            #no pcl found so we create init feature vector
             self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
-    '''
+    
 
-    def extracted_lidar_features(self):
-        self.extracted_features_points = np.empty((1,3), np.int32)
-        if self.batch_last_samples.size > 0:
-            pc = self.batch_last_samples #needed this due to concurrency issues
-            index_sector = self.subdivide_pointcloud_to_sectors(pc)
-            for n in range(self.number_of_sectors):
-                if (len(index_sector[n]) > 0):
-                    sector = np.delete(pc, np.array(index_sector[n]), 0)
-                    #self.vis_points(self.batch_last_samples)
-                    if sector.size > 0:
-                        distance, closesd_p = self.get_distance_to_closest_point(sector)
-                        self.extracted_features[n] = distance
-                        self.extracted_features_points = np.vstack([self.extracted_features_points, closesd_p])
-                    else:
-                        self.extracted_features[n] = self.max_dist_search
-                else:
-                    #no sector found so we set init feature
-                    self.extracted_features[n] = self.max_dist_search
+    def create_pcl_feature_vector(self, pcl_sector, index_sector, index_stack, n, k, feature_index):
+        '''
+        We populate the pcl feature vector with the shortest distances from each stack (and sector)
+        '''
+        if (len(index_sector[n]) > 0):
+            if self.number_of_stacks > 1 and len(index_stack[k]) > 0:
+                stack = np.delete(pcl_sector, np.array(index_stack[k]), 0)
+            else:
+                #all points lies in one stack
+                stack = pcl_sector
+
+            if (pcl_sector.size > 0 and self.number_of_stacks <= 1) or (stack.size > 0 and self.number_of_stacks > 1):
+                distance, closesd_p = self.get_distance_to_closest_point(stack)
+                self.extracted_features[feature_index] = distance
+                self.extracted_features_points = np.vstack([self.extracted_features_points, closesd_p])
+            else:
+                self.extracted_features[feature_index] = self.max_dist_search
+
         else:
-            #no pcl found so we create init features
-            self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
-    '''
+            #no sector found so we set init feature
+            self.extracted_features[feature_index] = self.max_dist_search
+
 
     def reset_lidar_storage(self):
         '''
@@ -251,7 +233,6 @@ class LidarFeatureExtract:
             for sliceN in range(self.number_of_sectors):
                 if (theta < sliceN*pi_div or theta >= (sliceN+1)*pi_div):
                     index_sector[sliceN].append(i)
-                    continue
 
             i += 1
 
