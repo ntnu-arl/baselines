@@ -101,7 +101,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0) #4.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 7.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25) #0.35
@@ -111,7 +111,7 @@ class RotorsWrappers:
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05]) #z was 1.0
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.1, 0.03, 0.03, 0.05]) #z was 1.0
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
@@ -121,7 +121,7 @@ class RotorsWrappers:
         self.R_action = np.array(list(self.R_action))
         self.goal_reward = rospy.get_param('goal_reward', 50.0) #50
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 30.0) #70
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 70.0) #70
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -479,7 +479,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #extend time
+        self.reset_timer(r * 2) #extend time
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -506,8 +506,8 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([0.0, 0.0, 9.0], dtype=np.float32)
-            state_low = np.array([0.0, 0.0, 6.0], dtype=np.float32)
+            state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
+            state_low = np.array([-2.0, -2.0, 3.0], dtype=np.float32)
             #state_high = np.array([9.0, -9.0, 5.0], dtype=np.float32)
             #state_low = np.array([9.0, -9.0, 5.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
@@ -603,7 +603,7 @@ class RotorsWrappers:
 
         self.unpause_physics_proxy(EmptyRequest())
 
-    '''
+
     def change_environment_different_shapes(self):
         self.pause_physics_proxy(EmptyRequest())
         number_of_stat_objects = 12
@@ -638,7 +638,7 @@ class RotorsWrappers:
             time.sleep(0.03) # since there is no ros wall rate option i python... (need time between diff pub)
 
         self.unpause_physics_proxy(EmptyRequest())
-    '''
+
 
     def position_xyz_response(self):
         fig,ax = plt.subplots(3,1,clear=True)
