@@ -164,8 +164,8 @@ class RotorsWrappers:
         pc_features_obs = np.sort(new_obs[6:(PCL_FEATURE_SIZE + 6)]) #smallest dist is at index 0
 
         #the higher this is, the more negative reward when to close to obstacles
-        sigmas1 = np.array([0.5, 0.45, 0.45, 0.44])
-        sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.4)
+        sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
+        sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
         sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
         #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
         reward_small_dist = 0
