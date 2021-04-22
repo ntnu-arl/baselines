@@ -101,7 +101,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0) #4.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.3) #0.35
@@ -111,7 +111,8 @@ class RotorsWrappers:
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05]) #z was 1.0
+        #self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05]) #z was 1.0
+        self.Q_state = rospy.get_param('Q_state', [6.0, 6.0, 10.0, 0.03, 0.03, 0.05]) #z was 1.0
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
@@ -119,9 +120,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 50.0) #50
+        self.goal_reward = rospy.get_param('goal_reward', 30.0) #50
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 70.0) #70
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 20.0) #70
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -150,7 +151,7 @@ class RotorsWrappers:
         # calculate reward
         action = np.array([command.thrust.x, command.thrust.y, command.thrust.z])
         Qx = self.Q_state.dot(new_obs[0:6])
-        xT_Qx = new_obs[0:6].transpose().dot(Qx) / 40.0
+        xT_Qx = new_obs[0:6].transpose().dot(Qx) / 250.0
 
         Ru = self.R_action.dot(action)
         uT_Ru = action.transpose().dot(Ru) / 250.0
@@ -160,9 +161,9 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
-        #clerance rewards        
+        #clerance rewards
         if PCL_STACK_SIZE == 3 and PCL_SECTOR_SIZE == 8:
-            pc_features_obs = (new_obs[6:]) 
+            pc_features_obs = (new_obs[6:])
             #smallest dist is at index 0
             pc_features_obs_layer1 = pc_features_obs[0::3]
             pc_features_obs_layer2 = pc_features_obs[1::3]
@@ -172,22 +173,24 @@ class RotorsWrappers:
             pc_features_obs_layer2 = np.sort(pc_features_obs_layer2)
             pc_features_obs_layer3 = np.sort(pc_features_obs_layer3)
 
+            #the higher this is, the more negative reward when to close to obstacles
             sigmas1 = np.array([0.014, 0.014, 0.014, 0.014, 0.014, 0.014, 0.014, 0.014])
             sigmas2 = np.array([0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015])
             sigmas3 = sigmas1
-            
+
             sigmas = np.concatenate((sigmas1, sigmas2, sigmas3), axis=None)
             pc_features_obs = np.concatenate((pc_features_obs_layer1, pc_features_obs_layer2, pc_features_obs_layer3), axis=None)
 
         else:
-            pc_features_obs = np.sort(new_obs[6:(PCL_FEATURE_SIZE + 6)]) #smallest dist is at index 0
+            pc_features_obs = np.sort(new_obs[6:]) #smallest dist is at index 0
+
             #the higher this is, the more negative reward when to close to obstacles
             sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
             sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
             sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
 
         #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
-        
+
         reward_small_dist = 0
         for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
@@ -196,7 +199,7 @@ class RotorsWrappers:
         #print("Smallest dist:", reward_small_dist)
 
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.35): #0.35
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3): #0.35
             reward = reward + self.goal_reward
             self.done = False
             info = {'status':'reach goal'}
@@ -237,7 +240,7 @@ class RotorsWrappers:
                 self.robot_velocity = np.delete(self.robot_velocity, (0), axis=0)
 
         #print("Distance from optimal path:", new_obs[6])
-        print("Reward for this step:", reward)
+        #print("Reward for this step:", reward)
         #print("Obs for this step:", new_obs)
 
         return (new_obs, reward, self.done, info)
@@ -265,7 +268,7 @@ class RotorsWrappers:
         else:
             new_obs = None
         return new_obs
-    
+
     def scale_obs(self, new_obs):
         new_obs1 = new_obs[0:3]/self.initial_goal_generation_radius #scalling down pos error
         new_obs2 = new_obs[3:6] #no need for scalling down vel error as it is small
@@ -519,7 +522,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 2) #extend time
+        self.reset_timer(r * 3) #extend time
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
