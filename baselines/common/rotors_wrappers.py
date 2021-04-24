@@ -104,7 +104,7 @@ class RotorsWrappers:
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0) #4.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
 
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.3) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25) #0.35
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
             'delta::delta/base_link::delta/base_link_fixed_joint_lump__delta_collision_collision'
@@ -112,7 +112,9 @@ class RotorsWrappers:
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
         #self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05]) #z was 1.0
-        self.Q_state = rospy.get_param('Q_state', [6.0, 6.0, 10.0, 0.03, 0.03, 0.05]) #z was 1.0
+        self.Q_state = rospy.get_param('Q_state', [2.6, 2.6, 6.0, 0.03, 0.03, 0.05]) #z was 6.0
+        #self.Q_state = rospy.get_param('Q_state', [2.9, 2.9, 5.5, 0.03, 0.03, 0.05]) #z was 6.0
+        #self.Q_state = rospy.get_param('Q_state', [4.6, 4.6, 7.0, 0.03, 0.03, 0.05]) #z was 6.0
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
@@ -175,7 +177,8 @@ class RotorsWrappers:
 
             #the higher this is, the more negative reward when to close to obstacles
             sigmas1 = np.array([0.014, 0.014, 0.014, 0.014, 0.014, 0.014, 0.014, 0.014])
-            sigmas2 = np.array([0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015])
+            sigmas2 = np.array([0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02])
+            #sigmas2 = np.array([0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015])
             sigmas3 = sigmas1
 
             sigmas = np.concatenate((sigmas1, sigmas2, sigmas3), axis=None)
@@ -199,7 +202,8 @@ class RotorsWrappers:
         #print("Smallest dist:", reward_small_dist)
 
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3): #0.35
+        error_pos = new_obs[0:3]*self.initial_goal_generation_radius
+        if (np.linalg.norm(error_pos) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3): #0.3
             reward = reward + self.goal_reward
             self.done = False
             info = {'status':'reach goal'}
