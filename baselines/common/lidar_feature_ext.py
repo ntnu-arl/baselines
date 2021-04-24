@@ -46,7 +46,7 @@ class LidarFeatureExtract:
         xyz = np.array([(x, y, z) for x, y, z, _, _ in points]) # assumes XYZIR
 
         if xyz.size > 0 and self.store_data:
-            xyz = self.filter_points(xyz, -self.max_dist_search, self.max_dist_search)
+            xyz = self.filter_points(xyz, -10.0, 10.0)
 
             if self.size_batch >= self.bach_size_pc:
                 #self.vis_points(self.batch_last_samples)
@@ -139,7 +139,7 @@ class LidarFeatureExtract:
         else:
             #no pcl found so we create init feature vector
             self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
-    
+
 
     def create_pcl_feature_vector(self, pcl_sector, index_sector, index_stack, n, k, feature_index):
         '''

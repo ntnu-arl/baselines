@@ -111,10 +111,16 @@ class RotorsWrappers:
         )
         self.ground_collision_frame = rospy.get_param(
             'ground_collision_frame', 'ground_plane::link::collision')
-        #self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05]) #z was 1.0
-        self.Q_state = rospy.get_param('Q_state', [2.6, 2.6, 6.0, 0.03, 0.03, 0.05]) #z was 6.0
+        self.Q_state = rospy.get_param('Q_state', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05]) #z was 1.0
+        #self.Q_state = rospy.get_param('Q_state', [2.6, 2.6, 6.0, 0.03, 0.03, 0.05]) #did not work
         #self.Q_state = rospy.get_param('Q_state', [2.9, 2.9, 5.5, 0.03, 0.03, 0.05]) #z was 6.0
         #self.Q_state = rospy.get_param('Q_state', [4.6, 4.6, 7.0, 0.03, 0.03, 0.05]) #z was 6.0
+        #self.Q_state = rospy.get_param('Q_state', [5.4, 5.4, 9.0, 0.03, 0.03, 0.05]) #did not work
+
+        #self.Q_state_test = rospy.get_param('Q_state_test', [0.6, 0.6, 1.0, 0.03, 0.03, 0.05]) #z was 1.0
+        #self.Q_state_test = np.array(list(self.Q_state_test))
+        #self.Q_state_test = np.diag(self.Q_state_test)
+
         self.Q_state = np.array(list(self.Q_state))
         self.Q_state = np.diag(self.Q_state)
         print('Q_state:', self.Q_state)
@@ -163,6 +169,15 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
+
+        #testx = new_obs[0:3]*self.initial_goal_generation_radius
+        #x_test = np.concatenate((testx, new_obs[3:6]), axis=None)
+        #Qx_test = self.Q_state_test.dot(x_test)
+        #xT_Qx_test = x_test.transpose().dot(Qx_test) / 250.0
+
+        #print("Test; " , xT_Qx_test)
+        #print("Our: ", xT_Qx)
+
         #clerance rewards
         if PCL_STACK_SIZE == 3 and PCL_SECTOR_SIZE == 8:
             pc_features_obs = (new_obs[6:])
@@ -176,8 +191,8 @@ class RotorsWrappers:
             pc_features_obs_layer3 = np.sort(pc_features_obs_layer3)
 
             #the higher this is, the more negative reward when to close to obstacles
-            sigmas1 = np.array([0.014, 0.014, 0.014, 0.014, 0.014, 0.014, 0.014, 0.014])
-            sigmas2 = np.array([0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02])
+            sigmas1 = np.array([0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25])
+            sigmas2 = np.array([0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35])
             #sigmas2 = np.array([0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015, 0.015])
             sigmas3 = sigmas1
 
@@ -202,8 +217,8 @@ class RotorsWrappers:
         #print("Smallest dist:", reward_small_dist)
 
         # reach goal?
-        error_pos = new_obs[0:3]*self.initial_goal_generation_radius
-        if (np.linalg.norm(error_pos) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3): #0.3
+        #error_pos = new_obs[0:3]*self.initial_goal_generation_radius
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3): #0.3
             reward = reward + self.goal_reward
             self.done = False
             info = {'status':'reach goal'}
@@ -264,7 +279,7 @@ class RotorsWrappers:
             pcl_features = self.lidar_data.extracted_features
             #pcl_features = np.full(PCL_FEATURE_SIZE, 10.0)
             new_obs = np.concatenate((new_obs, pcl_features), axis=None)
-            new_obs = self.scale_obs(new_obs)
+            #new_obs = self.scale_obs(new_obs)
             #print(new_obs)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
