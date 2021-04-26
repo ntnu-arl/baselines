@@ -28,7 +28,7 @@ class LidarFeatureExtract:
         self.size_batch = 0
         self.bach_size_pc = bach_size_pc
 
-        self.max_dist_search = 20.0
+        self.max_dist_search = 50.0
 
         self.number_of_stacks = stack_size
         self.number_of_sectors = sector_size
