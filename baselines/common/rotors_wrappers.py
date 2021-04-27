@@ -43,7 +43,7 @@ class RotorsWrappers:
         #                dtype=np.float32)
 
         #LIDAR init
-        self.lidar_data = LidarFeatureExtract(PCL_SECTOR_SIZE, PCL_STACK_SIZE, 3)
+        self.lidar_data = LidarFeatureExtract(PCL_SECTOR_SIZE, PCL_STACK_SIZE, 1)
         pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
 
@@ -97,7 +97,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0) #4.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0) #stable24: 3.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25) #0.35
 
@@ -116,7 +116,7 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 30.0) #stable24: 30
+        self.goal_reward = rospy.get_param('goal_reward', 50.0) #stable24: 30
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
         self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 30.0) #stable24: 30
 
@@ -170,12 +170,13 @@ class RotorsWrappers:
             pc_features_obs_layer3 = np.sort(pc_features_obs_layer3)
 
             #the higher this is, the more negative reward when to close to obstacles
-            sigmas1 = np.full(8, 0.20)
-            sigmas2 = np.array([0.35, 0.25, 0.25, 0.24, 0.2, 0.2, 0.2, 0.2])#np.full(8, 0.25)
+            sigmas1 = np.full(8, 0.20) #this was 22
+            sigmas2 = np.array([0.30, 0.30, 0.24, 0.24, 0.20, 0.20, 0.20, 0.20]) #this before np.full(8, 0.25)
+            sigmas3 = sigmas1
             #This worked for stable 24
             #sigmas1 = np.full(8, 0.20)
             #sigmas2 = np.array([0.35, 0.25, 0.25, 0.24, 0.2, 0.2, 0.2, 0.2])#np.full(8, 0.25)
-            sigmas3 = sigmas1
+
 
             sigmas = np.concatenate((sigmas1, sigmas2, sigmas3), axis=None)
             pc_features_obs = np.concatenate((pc_features_obs_layer1, pc_features_obs_layer2, pc_features_obs_layer3), axis=None)
@@ -198,7 +199,7 @@ class RotorsWrappers:
         #print("Smallest dist:", reward_small_dist)
 
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3): #0.3
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.35): #stable24 0.3
             reward = reward + self.goal_reward
             self.done = False
             info = {'status':'reach goal'}
@@ -429,14 +430,14 @@ class RotorsWrappers:
         robot_odom = Odometry()
         robot_odom.pose.pose = robot_pose
         current_goal = self.transform_goal_to_world_frame(robot_odom, goal)
-        #while current_goal.position.z < 0:
+        while current_goal.position.z < 0:
             #goal is under floor
-        #    v = random.random()
-        #    phi = np.arccos(2.0 * v - 1.0)
-        #    cosPhi = np.cos(phi)
-        #    z = r * cosPhi
-        #    goal.position.z = z
-        #    current_goal = self.transform_goal_to_world_frame(robot_odom, goal)
+            v = random.random()
+            phi = np.arccos(2.0 * v - 1.0)
+            cosPhi = np.cos(phi)
+            z = r * cosPhi
+            goal.position.z = z
+            current_goal = self.transform_goal_to_world_frame(robot_odom, goal)
 
         self.get_goal_coordinates(current_goal.position)
 
@@ -547,10 +548,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([0.0, 0.0, 9.0], dtype=np.float32)
-            state_low = np.array([0.0, 0.0, 6.0], dtype=np.float32)
-            #state_high = np.array([9.0, -9.0, 5.0], dtype=np.float32)
-            #state_low = np.array([9.0, -9.0, 5.0], dtype=np.float32)
+            state_high = np.array([2.0, 2.0, 6.0], dtype=np.float32)
+            state_low = np.array([-2.0, -2.0, 4.0], dtype=np.float32)
+            #state_high = np.array([0.0, 0.0, 9.0], dtype=np.float32) #stable 24
+            #state_low = np.array([0.0, 0.0, 6.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
