@@ -97,7 +97,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0) #stable24: 3.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0) #stable24: 3.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25) #0.35
 
@@ -116,7 +116,7 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 50.0) #stable24: 30
+        self.goal_reward = rospy.get_param('goal_reward', 30.0) #stable24: 30
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
         self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 30.0) #stable24: 30
 
@@ -159,7 +159,7 @@ class RotorsWrappers:
 
         #clerance rewards
         if PCL_STACK_SIZE == 3 and PCL_SECTOR_SIZE == 8:
-            pc_features = (new_obs[6:])
+            pc_features = 1/(new_obs[6:])
             pc_features_obs_layer1 = pc_features[0::3]
             pc_features_obs_layer2 = pc_features[1::3]
             pc_features_obs_layer3 = pc_features[2::3]
@@ -170,12 +170,13 @@ class RotorsWrappers:
             pc_features_obs_layer3 = np.sort(pc_features_obs_layer3)
 
             #the higher this is, the more negative reward when to close to obstacles
-            sigmas1 = np.full(8, 0.20) #this was 22
-            sigmas2 = np.array([0.30, 0.30, 0.24, 0.24, 0.20, 0.20, 0.20, 0.20]) #this before np.full(8, 0.25)
-            sigmas3 = sigmas1
+            #sigmas1 = np.full(8, 0.20) #this was 22
+            #sigmas2 = np.array([0.30, 0.30, 0.24, 0.24, 0.20, 0.20, 0.20, 0.20]) #this before np.full(8, 0.25)
+            #sigmas3 = sigmas1
             #This worked for stable 24
-            #sigmas1 = np.full(8, 0.20)
-            #sigmas2 = np.array([0.35, 0.25, 0.25, 0.24, 0.2, 0.2, 0.2, 0.2])#np.full(8, 0.25)
+            sigmas1 = np.full(8, 0.20)
+            sigmas2 = np.array([0.35, 0.25, 0.25, 0.24, 0.2, 0.2, 0.2, 0.2])#np.full(8, 0.25) #
+            sigmas3 = sigmas1
 
 
             sigmas = np.concatenate((sigmas1, sigmas2, sigmas3), axis=None)
@@ -188,8 +189,6 @@ class RotorsWrappers:
             sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
             sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
             sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
-
-        #sigmas = np.array([0.45, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4])
 
         reward_small_dist = 0.0
         for i in range(len(pc_features_obs)):
@@ -259,7 +258,7 @@ class RotorsWrappers:
             pcl_features = self.lidar_data.extracted_features
             #pcl_features = np.full(PCL_FEATURE_SIZE, 10.0)
             new_obs = np.concatenate((new_obs, pcl_features), axis=None)
-            #new_obs = self.scale_obs(new_obs)
+            new_obs = self.scale_obs(new_obs)
             #print(new_obs)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
@@ -268,14 +267,13 @@ class RotorsWrappers:
             new_obs = None
         return new_obs
 
-    #def scale_obs(self, new_obs):
-        #new_obs1 = new_obs[0:3]/self.initial_goal_generation_radius #scalling down pos error
-        #new_obs2 = new_obs[3:6] #no need for scalling down vel error as it is small
-        #new_obs3 = new_obs[6:]/(10*math.sqrt(3)) #scalling down distance meas
+    def scale_obs(self, new_obs):
+        new_obs1 = new_obs[0:6]#/self.initial_goal_generation_radius #no need for normalize pos error as it is done in ddpg class
+        new_obs2 = 1/new_obs[6:] #scalling down distance meas
 
-        #new_obs = np.concatenate((new_obs1, new_obs2, new_obs3), axis=None)
+        new_obs = np.concatenate((new_obs1, new_obs2), axis=None)
 
-    #    return new_obs
+        return new_obs
 
 
     def odom_callback(self, msg):
