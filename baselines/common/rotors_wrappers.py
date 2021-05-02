@@ -99,7 +99,7 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0) #stable24: 3.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.35) #0.35
 
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
@@ -171,7 +171,7 @@ class RotorsWrappers:
 
             #the higher this is, the more negative reward when to close to obstacles
             sigmas1 = np.full(8, 0.20) #this was 22
-            sigmas2 = np.array([0.30, 0.30, 0.24, 0.24, 0.20, 0.20, 0.20, 0.20]) #this before np.full(8, 0.25)
+            sigmas2 = np.array([0.30, 0.30, 0.24, 0.24, 0.20, 0.20, 0.20, 0.20]) #this before np.full(8, 0.30)
             sigmas3 = sigmas1
             #This worked for stable 24
             #sigmas1 = np.full(8, 0.20)
