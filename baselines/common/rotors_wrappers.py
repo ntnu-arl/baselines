@@ -190,12 +190,14 @@ class RotorsWrappers:
             sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
             sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
 
+        compute = self.features_to_far(pc_features_obs)
         reward_small_dist = 0.0
-        for i in range(len(pc_features_obs)):
-            #Sum clerance rewards to the closest obstacle
-            reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
+        if compute:
+            for i in range(len(pc_features_obs)):
+                #Sum clerance rewards to the closest obstacle
+                reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
 
-        #print("Smallest dist:", reward_small_dist)
+        print("Smallest dist:", reward_small_dist)
 
         # reach goal?
         if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.35): #stable24 0.3
@@ -242,6 +244,15 @@ class RotorsWrappers:
         #print("Obs for this step:", new_obs)
 
         return (new_obs, reward, self.done, info)
+
+    def features_to_far(self, pc_features_obs):
+        compute_reward = False
+        for i in pc_features_obs:
+            if i <= 1.5:
+                compute_reward = True
+        
+        return compute_reward
+
 
     def get_new_obs(self):
         if (len(self.robot_odom) > 0):
