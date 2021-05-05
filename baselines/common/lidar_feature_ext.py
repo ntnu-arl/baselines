@@ -7,7 +7,7 @@ from visualization_msgs.msg import MarkerArray
 from geometry_msgs.msg import Pose
 from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation as R
-import open3d as o3d
+##import open3d as o3d
 import numpy as np
 import math
 
@@ -349,16 +349,16 @@ class LidarFeatureExtract:
         '''
         self.vis_pc = set
 
-    def vis_points(self, pc):
+    #def vis_points(self, pc):
         '''
         Visualize points with open3d
         '''
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(pc)
+        ##pcd = o3d.geometry.PointCloud()
+        ##pcd.points = o3d.utility.Vector3dVector(pc)
 
         #adding colors. Need to color each point...
         #rgb = np.asarray([0.0, 255.0, 0.0])
         #rgb_t = np.transpose(rgb)/255.0
         #pcd.colors = o3d.utility.Vector3dVector([rgb_t, rgb_t, rgb_t, rgb_t])
 
-        o3d.visualization.draw_geometries([pcd])
+        ##o3d.visualization.draw_geometries([pcd])
