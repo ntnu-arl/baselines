@@ -147,8 +147,8 @@ def learn(network, env,
     best_return = np.finfo(np.float32).min
 
     for epoch in range(nb_epochs):
-        env.change_environment()
-        #env.change_environment_different_shapes()
+        #env.change_environment()
+        env.change_environment_different_shapes()
         for cycle in range(nb_epoch_cycles):
             # Perform rollouts.
             if nenvs > 1:

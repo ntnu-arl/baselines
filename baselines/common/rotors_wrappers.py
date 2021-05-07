@@ -118,7 +118,7 @@ class RotorsWrappers:
         self.R_action = np.array(list(self.R_action))
         self.goal_reward = rospy.get_param('goal_reward', 50.0) #stable24: 30
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 50.0) #stable24: 30
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0) #stable24: 30
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -159,7 +159,7 @@ class RotorsWrappers:
 
         #clerance rewards
         if PCL_STACK_SIZE == 3 and PCL_SECTOR_SIZE == 8:
-            pc_features = 1/(new_obs[6:])
+            pc_features = new_obs[6:]
             pc_features_obs_layer1 = pc_features[0::3]
             pc_features_obs_layer2 = pc_features[1::3]
             pc_features_obs_layer3 = pc_features[2::3]
@@ -170,8 +170,8 @@ class RotorsWrappers:
             pc_features_obs_layer3 = np.sort(pc_features_obs_layer3)
 
             #the higher this is, the more negative reward when to close to obstacles
-            sigmas1 = np.full(8, 0.20)
-            sigmas2 = np.full(8, 0.25)
+            sigmas1 = np.full(8, 0.18)#0.16
+            sigmas2 = np.full(8, 0.23)#0.22
             sigmas3 = sigmas1
             #This worked for stable 24
             #sigmas1 = np.full(8, 0.20)
@@ -191,16 +191,16 @@ class RotorsWrappers:
             sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
 
         reward_small_dist = 0.0
-        
+
         for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
-            if pc_features_obs[i] < 1.5:
-                reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
+            #if pc_features_obs[i] < 1.5:
+            reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
 
         #print("Smallest dist:", reward_small_dist)
 
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.35): #stable24 0.3
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.30): #stable24 0.3
             reward = reward + self.goal_reward
             self.done = False
             info = {'status':'reach goal'}
@@ -260,7 +260,7 @@ class RotorsWrappers:
             pcl_features = self.lidar_data.extracted_features
             #pcl_features = np.full(PCL_FEATURE_SIZE, 10.0)
             new_obs = np.concatenate((new_obs, pcl_features), axis=None)
-            new_obs = self.scale_obs(new_obs)
+            #new_obs = self.scale_obs(new_obs)
             #print(new_obs)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
@@ -548,10 +548,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
-            state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
-            #state_high = np.array([-1.0, 3.0, 3.0], dtype=np.float32) #stable 24
-            #state_low = np.array([-1.0, 3.0, 3.0], dtype=np.float32)
+            #state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
+            #state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
+            state_high = np.array([0.0, 0.0, 3.0], dtype=np.float32) #stable 24
+            state_low = np.array([0.0, 0.0, 3.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
