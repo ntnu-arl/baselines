@@ -521,7 +521,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(1) #extend time r * 3
+        self.reset_timer(r * 3) #extend time 
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
