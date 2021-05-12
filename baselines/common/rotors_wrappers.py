@@ -648,18 +648,23 @@ class RotorsWrappers:
 
     def change_environment_different_shapes(self):
         self.pause_physics_proxy(EmptyRequest())
-        number_of_stat_objects = 12
+
+        nr_blocks = 1
+        nr_pyramids = 3
+        nr_stones = 3
+        nr_u = 3
+        nr_shapes = nr_blocks + nr_pyramids + nr_stones + nr_u + 1
 
         for i in range(number_of_stat_objects):
             new_position = ModelState()
 
-            if i >= 0 and i < 2:
+            if i >= 0 and i < nr_blocks:
                 new_position.model_name = 'easySimple Block' + str(i)
-            if i >= 3 and i < 6:
+            if i >= nr_blocks and i < (nr_blocks + nr_pyramids):
                 new_position.model_name = 'easySimple Pyramid' + str(i)
-            if i >= 6 and i < 9:
+            if i >= (nr_blocks + nr_pyramids) and i < (nr_blocks + nr_pyramids + nr_stones):
                 new_position.model_name = 'easySimple Stone' + str(i)
-            if i >= 9 and i < 12:
+            if i >= (nr_blocks + nr_pyramids + nr_stones) and i < (nr_shapes - 1):
                 new_position.model_name = 'easySimple U' + str(i)
 
             new_position.reference_frame = 'world'
