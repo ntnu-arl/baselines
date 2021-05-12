@@ -116,9 +116,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 50.0) #stable24: 30
+        self.goal_reward = rospy.get_param('goal_reward', 5.0) #stable24: 30
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0) #stable24: 30
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 40.0) #stable24: 30
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -171,7 +171,7 @@ class RotorsWrappers:
 
             #the higher this is, the more negative reward when to close to obstacles
             sigmas1 = np.full(8, 0.18)#0.16
-            sigmas2 = np.full(8, 0.23)#0.22
+            sigmas2 = np.full(8, 0.22)#0.22
             sigmas3 = sigmas1
             #This worked for stable 24
             #sigmas1 = np.full(8, 0.20)
@@ -548,10 +548,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            #state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
-            #state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
-            state_high = np.array([0.0, 0.0, 3.0], dtype=np.float32) #stable 24
-            state_low = np.array([0.0, 0.0, 3.0], dtype=np.float32)
+            state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
+            state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
+            #state_high = np.array([3.0, 3.0, 3.0], dtype=np.float32) #stable 24
+            #state_low = np.array([3.0, 3.0, 3.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
@@ -621,7 +621,7 @@ class RotorsWrappers:
 
     def change_environment(self):
         self.pause_physics_proxy(EmptyRequest())
-        number_of_stat_objects = 9
+        number_of_stat_objects = 14
 
         for i in range(number_of_stat_objects):
             new_position = ModelState()
@@ -653,7 +653,7 @@ class RotorsWrappers:
         for i in range(number_of_stat_objects):
             new_position = ModelState()
 
-            if i >= 0 and i < 3:
+            if i >= 0 and i < 2:
                 new_position.model_name = 'easySimple Block' + str(i)
             if i >= 3 and i < 6:
                 new_position.model_name = 'easySimple Pyramid' + str(i)
