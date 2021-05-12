@@ -521,7 +521,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #extend time
+        self.reset_timer(1) #extend time r * 3
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -652,19 +652,18 @@ class RotorsWrappers:
         nr_blocks = 1
         nr_pyramids = 3
         nr_stones = 3
-        nr_u = 3
-        nr_shapes = nr_blocks + nr_pyramids + nr_stones + nr_u + 1
+        nr_u = 4
+        nr_shapes = nr_blocks + nr_pyramids + nr_stones + nr_u
 
-        for i in range(number_of_stat_objects):
+        for i in range(nr_shapes):
             new_position = ModelState()
-
             if i >= 0 and i < nr_blocks:
                 new_position.model_name = 'easySimple Block' + str(i)
             if i >= nr_blocks and i < (nr_blocks + nr_pyramids):
                 new_position.model_name = 'easySimple Pyramid' + str(i)
             if i >= (nr_blocks + nr_pyramids) and i < (nr_blocks + nr_pyramids + nr_stones):
                 new_position.model_name = 'easySimple Stone' + str(i)
-            if i >= (nr_blocks + nr_pyramids + nr_stones) and i < (nr_shapes - 1):
+            if i >= (nr_blocks + nr_pyramids + nr_stones) and i < nr_shapes:
                 new_position.model_name = 'easySimple U' + str(i)
 
             new_position.reference_frame = 'world'
