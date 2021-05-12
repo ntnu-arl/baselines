@@ -20,7 +20,9 @@ class LidarFeatureExtract:
     vis_pc = False
 
     def __init__(self, sector_size, stack_size, bach_size_pc):
-        self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
+        #self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
+        self.pc_data = rospy.Subscriber("/os1_cloud_node/points", PointCloud2, self.store_pc_data)
+        
         self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
         self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=1)
 
@@ -43,7 +45,7 @@ class LidarFeatureExtract:
 
     def store_pc_data(self, data):
         points = np.array(list(read_points(data)))
-        xyz = np.array([(x, y, z) for x, y, z, _, _ in points]) # assumes XYZIR
+        xyz = np.array([(x, y, z) for x, y, z, _, _ , _, _ , _, _  in points]) # assumes XYZIR
 
         if xyz.size > 0 and self.store_data:
             xyz = self.filter_points(xyz, -10.0, 10.0)

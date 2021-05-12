@@ -64,6 +64,9 @@ class RotorsWrappers:
         self.data_vis = False
 
         self.robot_odom = collections.deque([])
+        self.reference = collections.deque([])
+        self.prev_reference = np.array([])
+        self.current_reference = np.array([])
         self.msg_cnt = 0
         self.pcl_feature = np.array([])
 
@@ -79,6 +82,11 @@ class RotorsWrappers:
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
         self.pcl_feature_subscriber = rospy.Subscriber('/lidar_depth_feature', Float64MultiArray, self.pcl_feature_callback)
+
+        self.reference_trajectory = rospy.Subscriber('/reference_trajectory', Marker, self.get_reference)
+        #/msf_core/odometry                                                      
+        #/msf_core/pose
+        #https://answers.ros.org/question/335299/tracking-robot-position-using-marker/
 
         self.goal_training_publisher = rospy.Publisher("/delta/goal_training", Pose)
         self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
@@ -118,7 +126,7 @@ class RotorsWrappers:
         self.R_action = np.array(list(self.R_action))
         self.goal_reward = rospy.get_param('goal_reward', 5.0) #stable24: 30
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 40.0) #stable24: 30
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0) #stable24: 30
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -198,6 +206,14 @@ class RotorsWrappers:
             reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
 
         #print("Smallest dist:", reward_small_dist)
+        reference = self.reference[0]
+        self.current_reference = np.array([reference.points[-1].x, reference.points[-1].y, reference.points[-1].z])
+        if self.prev_reference != self.current_reference:
+            self.prev_reference = self.current_reference 
+            current_odom = self.robot_odom[0]
+            goal = self.generate_new_goal(current_odom)
+            self.draw_new_goal(goal)
+
 
         # reach goal?
         if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.30): #stable24 0.3
@@ -276,6 +292,11 @@ class RotorsWrappers:
         new_obs = np.concatenate((new_obs1, new_obs2), axis=None)
 
         return new_obs
+
+    def get_reference(self, msg):
+        self.reference.appendleft(msg)
+        if (len(self.reference) > 10): # save the last 10 odom msg
+            self.reference.pop()
 
 
     def odom_callback(self, msg):
@@ -358,7 +379,12 @@ class RotorsWrappers:
         r_goal_in_vechile = R.from_euler('z', goal_euler_angles[0] - robot_euler_angles[0], degrees=False)
         goal_pos = np.array([goal.position.x, goal.position.y, goal.position.z])
         robot_pos = np.array([robot_pose.position.x, robot_pose.position.y, robot_pose.position.z])
-        goal_pos_in_vehicle = R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix().dot((goal_pos - robot_pos))
+        
+        reference = self.reference[0]
+        current_reference = np.array([reference.points[-1].x, reference.points[-1].y, reference.points[-1].z])
+        goal_pos_in_vehicle = current_reference - robot_pos
+        
+        #goal_pos_in_vehicle = R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix().dot((goal_pos - robot_pos))
         # print('goal_pos:', goal_pos)
         # print('robot_pos:', robot_pos)
         # print('R:', R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix())
@@ -419,9 +445,12 @@ class RotorsWrappers:
         #     z = 0.5 - robot_z
 
         # rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
-        goal.position.x = x
-        goal.position.y = y
-        goal.position.z = z
+
+        reference = self.reference[0]
+
+        goal.position.x = reference.points[-1].x#x
+        goal.position.y = reference.points[-1].y#y
+        goal.position.z = reference.points[-1].z#z
         goal.orientation.x = 0
         goal.orientation.y = 0
         goal.orientation.z = 0
@@ -515,13 +544,14 @@ class RotorsWrappers:
 
         #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
 
+
         # put the robot at the start pose
         self.init_pose, _ = self.spawn_robot(start_pose)
         self.current_goal = goal
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #extend time 
+        self.reset_timer(r * 300) #extend time 
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -548,10 +578,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
-            state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
-            #state_high = np.array([3.0, 3.0, 3.0], dtype=np.float32) #stable 24
-            #state_low = np.array([3.0, 3.0, 3.0], dtype=np.float32)
+            #state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
+            #state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
+            state_high = np.array([0.0, 0.0, 1.0], dtype=np.float32) #stable 24
+            state_low = np.array([0.0, 0.0, 1.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
