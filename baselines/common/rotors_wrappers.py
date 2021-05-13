@@ -77,7 +77,7 @@ class RotorsWrappers:
         self.goal_in_vehicle_publisher = rospy.Publisher("/delta/goal_in_vehicle", Odometry)
         self.goal_init_publisher = rospy.Publisher("/delta/goal", Pose)
         self.cmd_publisher = rospy.Publisher("/delta/command/rate_thrust", RateThrust)
-        self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=50)
+        self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=1)
         self.sphere_marker_pub = rospy.Publisher('goal_published',
                                                  MarkerArray,
                                                  queue_size=1)
@@ -90,7 +90,7 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 3.0)
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 4.0)
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
         self.waypoint_radius = rospy.get_param('waypoint_radius', 0.25)
         self.robot_collision_frame = rospy.get_param(
@@ -107,7 +107,7 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 50.0)
+        self.goal_reward = rospy.get_param('goal_reward', 30.0)
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
         self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 30.0)
 
@@ -143,7 +143,7 @@ class RotorsWrappers:
         uT_Ru = action.transpose().dot(Ru) / 250.0
         reward = - uT_Ru
         #reward = -0.01
-        print(new_obs[0:6])
+        #print(new_obs[0:6])
         info = {'status':'none'}
         self.done = False
 
