@@ -26,6 +26,7 @@ PCL_STACK_SIZE = 3 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_SECTOR_SIZE * PCL_STACK_SIZE
 MARKERS_MAX = 20
+CLOSED_ENV = False
 
 class RotorsWrappers:
     def __init__(self):
@@ -51,8 +52,13 @@ class RotorsWrappers:
         state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
 
-        state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
-        state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
+        if CLOSED_ENV:
+            state_high = np.concatenate((state_robot_high, pcl_feature_high), axis=None)
+            state_low = np.concatenate((state_robot_low, pcl_feature_low), axis=None)
+        else:
+            state_high = state_robot_high
+            state_low = state_robot_low
+
 
         self.observation_space = spaces.Box(low=state_low, high=state_high, dtype=np.float32)
         self.reward_range = (-np.inf, np.inf)
@@ -171,47 +177,55 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
-        #clerance rewards
-        if PCL_STACK_SIZE == 3 and PCL_SECTOR_SIZE == 8:
-            pc_features = new_obs[6:]
-            pc_features_obs_layer1 = pc_features[0::3]
-            pc_features_obs_layer2 = pc_features[1::3]
-            pc_features_obs_layer3 = pc_features[2::3]
-
-            #smallest dist is at index 0
-            pc_features_obs_layer1 = np.sort(pc_features_obs_layer1)
-            pc_features_obs_layer2 = np.sort(pc_features_obs_layer2)
-            pc_features_obs_layer3 = np.sort(pc_features_obs_layer3)
-
-            #the higher this is, the more negative reward when to close to obstacles
-            sigmas1 = np.full(8, 0.18)#0.16
-            sigmas2 = np.full(8, 0.22)#0.22
-            sigmas3 = sigmas1
-            #This worked for stable 24
-            #sigmas1 = np.full(8, 0.20)
-            #sigmas2 = np.array([0.35, 0.25, 0.25, 0.24, 0.2, 0.2, 0.2, 0.2])#np.full(8, 0.25) #
-            #sigmas3 = sigmas1
-
-
-            sigmas = np.concatenate((sigmas1, sigmas2, sigmas3), axis=None)
-            pc_features_obs = np.concatenate((pc_features_obs_layer1, pc_features_obs_layer2, pc_features_obs_layer3), axis=None)
-
-        else:
-            pc_features_obs = np.sort(new_obs[6:]) #smallest dist is at index 0
-
-            #the higher this is, the more negative reward when to close to obstacles
-            sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
-            sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
-            sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
 
         reward_small_dist = 0.0
+        path_reward = 0.0
 
-        for i in range(len(pc_features_obs)):
-            #Sum clerance rewards to the closest obstacle
-            #if pc_features_obs[i] < 1.5:
-            reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
+        if CLOSED_ENV:
+            #clerance rewards
+            if PCL_STACK_SIZE == 3 and PCL_SECTOR_SIZE == 8:
+                pc_features = new_obs[6:]
+                pc_features_obs_layer1 = pc_features[0::3]
+                pc_features_obs_layer2 = pc_features[1::3]
+                pc_features_obs_layer3 = pc_features[2::3]
 
-        print("Smallest dist:", reward_small_dist)
+                #smallest dist is at index 0
+                pc_features_obs_layer1 = np.sort(pc_features_obs_layer1)
+                pc_features_obs_layer2 = np.sort(pc_features_obs_layer2)
+                pc_features_obs_layer3 = np.sort(pc_features_obs_layer3)
+
+                #the higher this is, the more negative reward when to close to obstacles
+                sigmas1 = np.full(8, 0.18)#0.16
+                sigmas2 = np.full(8, 0.22)#0.22
+                sigmas3 = sigmas1
+                #This worked for stable 24
+                #sigmas1 = np.full(8, 0.20)
+                #sigmas2 = np.array([0.35, 0.25, 0.25, 0.24, 0.2, 0.2, 0.2, 0.2])#np.full(8, 0.25) #
+                #sigmas3 = sigmas1
+
+
+                sigmas = np.concatenate((sigmas1, sigmas2, sigmas3), axis=None)
+                pc_features_obs = np.concatenate((pc_features_obs_layer1, pc_features_obs_layer2, pc_features_obs_layer3), axis=None)
+
+            else:
+                pc_features_obs = np.sort(new_obs[6:]) #smallest dist is at index 0
+
+                #the higher this is, the more negative reward when to close to obstacles
+                sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
+                sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
+                sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
+
+            for i in range(len(pc_features_obs)):
+                #Sum clerance rewards to the closest obstacle
+                #if pc_features_obs[i] < 1.5:
+                reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
+
+            #print("Smallest dist:", reward_small_dist)
+        else:
+            path_reward = 0.11
+            if new_obs[6] < 1:
+                path_reward = exp(new_obs[6]**2/(2*5)) - 1
+
 
         reference = self.reference[0]
         self.current_reference = np.array([reference.points[-1].x, reference.points[-1].y, reference.points[-1].z])
@@ -244,7 +258,7 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx - reward_small_dist
+            reward = reward - xT_Qx - reward_small_dist - path_reward
             pass
 
         # collide?
@@ -266,7 +280,8 @@ class RotorsWrappers:
             current_odom = self.robot_odom[0]
 
             # draw lidar features
-            self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
+            if CLOSED_ENV:
+                self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
 
             # record trajectory
             robot_position = np.array([current_odom.pose.pose.position.x, current_odom.pose.pose.position.y, current_odom.pose.pose.position.z])
@@ -297,10 +312,15 @@ class RotorsWrappers:
             goad_in_vehicle_frame.twist.twist.linear.y,
             goad_in_vehicle_frame.twist.twist.linear.z])
 
-            pcl_features = self.lidar_data.extracted_features
-            #pcl_features = np.full(PCL_FEATURE_SIZE, 10.0)
-            new_obs = np.concatenate((new_obs, pcl_features), axis=None)
-            #new_obs = self.scale_obs(new_obs)
+            if CLOSED_ENV:
+                pcl_features = self.lidar_data.extracted_features
+                #pcl_features = np.full(PCL_FEATURE_SIZE, 10.0)
+                new_obs = np.concatenate((new_obs, pcl_features), axis=None)
+                #new_obs = self.scale_obs(new_obs)
+            else:
+                new_obs = numpy.append(new_obs, self.calculate_cross_track_error())
+
+
             #print(new_obs)
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
