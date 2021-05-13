@@ -25,6 +25,7 @@ from mpl_toolkits.mplot3d import Axes3D
 PCL_STACK_SIZE = 3 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_SECTOR_SIZE * PCL_STACK_SIZE
+MARKERS_MAX = 20
 
 class RotorsWrappers:
     def __init__(self):
@@ -67,6 +68,10 @@ class RotorsWrappers:
         self.reference = collections.deque([])
         self.prev_reference = np.array([])
         self.current_reference = np.array([])
+        self.markerArray = MarkerArray()
+        self.marker_counter = 0
+        self.optimal_markerArray = MarkerArray()
+        self.optimal_marker_counter = 0
         self.msg_cnt = 0
         self.pcl_feature = np.array([])
 
@@ -94,10 +99,9 @@ class RotorsWrappers:
         self.goal_init_publisher = rospy.Publisher("/delta/goal", Pose)
         self.cmd_publisher = rospy.Publisher("/delta/command/rate_thrust", RateThrust)
         self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=1)
-        self.sphere_marker_pub = rospy.Publisher('goal_published',
-                                                 MarkerArray,
-                                                 queue_size=1)
-        self.pos_point_pub = rospy.Publisher('realpoints_marker', Marker, queue_size=1)
+        self.sphere_marker_pub = rospy.Publisher('goal_published', MarkerArray, queue_size=1)
+        self.pos_point_pub = rospy.Publisher('/trajectory/realpoints_marker', Marker, queue_size=1)
+        self.optimal_traj_marker_pub = rospy.Publisher('/trajectory/optimal_traj__marker', MarkerArray, queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
@@ -207,14 +211,30 @@ class RotorsWrappers:
             #if pc_features_obs[i] < 1.5:
             reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
 
-        #print("Smallest dist:", reward_small_dist)
+        print("Smallest dist:", reward_small_dist)
+
         reference = self.reference[0]
         self.current_reference = np.array([reference.points[-1].x, reference.points[-1].y, reference.points[-1].z])
-        if self.prev_reference != self.current_reference:
+
+        if not (np.array_equal(self.prev_reference, self.current_reference)):
             self.prev_reference = self.current_reference
             current_odom = self.robot_odom[0]
-            goal = self.generate_new_goal(current_odom)
-            self.draw_new_goal(goal)
+            reference_pos = Pose()
+            self.pause_physics_proxy(EmptyRequest())
+
+            reference_pos.position.x = self.current_reference[0]
+            reference_pos.position.y = self.current_reference[1]
+            reference_pos.position.z = self.current_reference[2]
+            reference_pos.orientation.x = 0
+            reference_pos.orientation.y = 0
+            reference_pos.orientation.z = 0
+            reference_pos.orientation.w = 1
+
+            self.draw_new_goal(reference_pos)
+            self.store_entire_optimal_trajectory()
+
+            #goal = self.generate_new_goal(new_position)
+            self.unpause_physics_proxy(EmptyRequest())
 
 
         # reach goal?
@@ -477,9 +497,8 @@ class RotorsWrappers:
         return current_goal, r
 
     def draw_new_goal(self, p):
-        markerArray = MarkerArray()
-        count = 0
-        MARKERS_MAX = 20
+        #markerArray = MarkerArray()
+
         marker = Marker()
         marker.header.frame_id = "world"
         marker.type = marker.SPHERE
@@ -497,20 +516,20 @@ class RotorsWrappers:
 
         # We add the new marker to the MarkerArray, removing the oldest
         # marker from it when necessary
-        if (count > MARKERS_MAX):
-            markerArray.markers.pop(0)
+        if (self.marker_counter > MARKERS_MAX):
+            self.markerArray.markers.pop(0)
 
-        markerArray.markers.append(marker)
+        self.markerArray.markers.append(marker)
         # Renumber the marker IDs
         id = 0
-        for m in markerArray.markers:
+        for m in self.markerArray.markers:
             m.id = id
             id += 1
 
         # Publish the MarkerArray
-        self.sphere_marker_pub.publish(markerArray)
+        self.sphere_marker_pub.publish(self.markerArray)
 
-        count += 1
+        self.marker_counter += 1
 
     def timer_callback(self, event):
         self.timeout = True
@@ -566,6 +585,10 @@ class RotorsWrappers:
 
         #reset trajectory plot in rviz
         self.reset_draw_trajectory()
+        self.marker_counter = 0
+        self.markerArray = MarkerArray()
+        self.optimal_markerArray = MarkerArray()
+        self.optimal_marker_counter = 0
 
         obs = self.get_new_obs()
 
@@ -903,6 +926,29 @@ class RotorsWrappers:
 
         # marker line points
         self.marker.points = []
+
+    def store_entire_optimal_trajectory(self):
+
+        marker = self.reference[0]
+        #marker = self.reference
+
+
+        # We add the new marker to the MarkerArray, removing the oldest
+        # marker from it when necessary
+        if (self.optimal_marker_counter > MARKERS_MAX):
+            self.optimal_markerArray.markers.pop(0)
+
+        self.optimal_markerArray.markers.append(marker)
+        # Renumber the marker IDs
+        id = 0
+        for m in self.optimal_markerArray.markers:
+            m.id = id
+            id += 1
+
+        # Publish the MarkerArray
+        self.optimal_traj_marker_pub.publish(self.optimal_markerArray)
+
+        self.optimal_marker_counter += 1
 
 
     def get_goal_coordinates(self, position):
