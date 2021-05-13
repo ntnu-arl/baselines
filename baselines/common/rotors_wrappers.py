@@ -6,7 +6,7 @@ import random
 import collections
 from mav_msgs.msg import RateThrust
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, Point
 from gazebo_msgs.msg import ContactsState, ModelState
 from std_srvs.srv import Empty, EmptyRequest
 from visualization_msgs.msg import Marker
@@ -74,6 +74,7 @@ class RotorsWrappers:
         self.shortest_dist_line = []
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
+        self.marker = Marker()
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
@@ -88,6 +89,7 @@ class RotorsWrappers:
         self.sphere_marker_pub = rospy.Publisher('goal_published',
                                                  MarkerArray,
                                                  queue_size=1)
+        self.pos_point_pub = rospy.Publisher('realpoints_marker', Marker, queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
@@ -232,6 +234,8 @@ class RotorsWrappers:
 
             # record trajectory
             robot_position = np.array([current_odom.pose.pose.position.x, current_odom.pose.pose.position.y, current_odom.pose.pose.position.z])
+
+            self.draw_trajectory(robot_position)
             self.robot_trajectory = np.vstack([self.robot_trajectory, robot_position])
             robot_twist = np.array([current_odom.twist.twist.linear.x, current_odom.twist.twist.linear.y, current_odom.twist.twist.linear.z])
             self.robot_velocity = np.vstack([self.robot_velocity, robot_twist])
@@ -521,7 +525,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #extend time 
+        self.reset_timer(r * 3) #extend time
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -529,6 +533,9 @@ class RotorsWrappers:
         self.lidar_data.store_data = False
         self.lidar_data.reset_lidar_storage()
         self.lidar_data.store_data = True
+
+        #reset trajectory plot in rviz
+        self.reset_draw_trajectory()
 
         obs = self.get_new_obs()
 
@@ -830,6 +837,43 @@ class RotorsWrappers:
 
         RMS = math.sqrt(total_length_squared/len(length))
         return RMS
+
+    def draw_trajectory(self, current_pos):
+        add_point = Point()
+        add_point.x = current_pos[0]
+        add_point.y = current_pos[1]
+        add_point.z = current_pos[2]
+
+        self.marker.points.append(add_point)
+
+        self.pos_point_pub.publish(self.marker)
+
+    def reset_draw_trajectory(self):
+        self.marker = Marker()
+        self.marker.header.frame_id = "world"
+        self.marker.type = self.marker.LINE_STRIP
+        self.marker.action = self.marker.ADD
+
+        # marker scale
+        self.marker.scale.x = 0.03
+        self.marker.scale.y = 0.03
+        self.marker.scale.z = 0.03
+
+        # marker color
+        self.marker.color.a = 1.0
+        self.marker.color.r = 1.0
+        self.marker.color.g = 1.0
+        self.marker.color.b = 0.0
+
+        # marker orientaiton
+        self.marker.pose.orientation.x = 0.0
+        self.marker.pose.orientation.y = 0.0
+        self.marker.pose.orientation.z = 0.0
+        self.marker.pose.orientation.w = 1.0
+
+        # marker line points
+        self.marker.points = []
+
 
     def get_goal_coordinates(self, position):
         self.goal_coordinates = position
