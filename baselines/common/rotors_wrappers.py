@@ -21,7 +21,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-PCL_FEATURE_SIZE = 1440
+CROSS_TRACK_FEAT = True
 
 class RotorsWrappers:
     def __init__(self):
@@ -38,7 +38,11 @@ class RotorsWrappers:
         #state_high = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max,
         #                np.finfo(np.float32).max, np.finfo(np.float32).max, np.finfo(np.float32).max],
         #                dtype=np.float32)
-        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
+        if CROSS_TRACK_FEAT:
+            state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
+        else:
+            state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
+
         #pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         state_robot_low = -state_robot_high
         #pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
@@ -146,9 +150,10 @@ class RotorsWrappers:
         info = {'status':'none'}
         self.done = False
 
-        path_reward = 0.11
-        if new_obs[6] < 1:
-            path_reward = exp(new_obs[6]**2/(2*5)) - 1
+        if CROSS_TRACK_FEAT:
+            path_reward = 0.11
+            if new_obs[6] < 1:
+                path_reward = exp(new_obs[6]**2/(2*5)) - 1
 
         # reach goal?
         if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.3):
@@ -157,8 +162,11 @@ class RotorsWrappers:
             info = {'status':'reach goal'}
             print('reach goal!')
         else:
-            reward = reward - xT_Qx #- path_reward
-            #pass
+            if CROSS_TRACK_FEAT:
+                reward = reward - xT_Qx - path_reward
+            else:
+                reward = reward - xT_Qx
+            pass
 
         # collide?
         if self.collide:
@@ -198,8 +206,11 @@ class RotorsWrappers:
             goad_in_vehicle_frame.pose.pose.position.z,
             goad_in_vehicle_frame.twist.twist.linear.x,
             goad_in_vehicle_frame.twist.twist.linear.y,
-            goad_in_vehicle_frame.twist.twist.linear.z,
-            self.calculate_cross_track_error()])
+            goad_in_vehicle_frame.twist.twist.linear.z])
+            if CROSS_TRACK_FEAT:
+                cross_e = self.calculate_cross_track_error() #1.0 is stable
+                new_obs = np.append(new_obs, cross_e)
+
             #robot_euler_angles[2], # roll [rad]
             #robot_euler_angles[1]]) # pitch [rad]
             #new_obs = np.concatenate((new_obs, self.pcl_feature), axis=None)
