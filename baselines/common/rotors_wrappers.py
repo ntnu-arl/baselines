@@ -89,7 +89,7 @@ class RotorsWrappers:
         self.sphere_marker_pub = rospy.Publisher('goal_published',
                                                  MarkerArray,
                                                  queue_size=1)
-        self.pos_point_pub = rospy.Publisher('realpoints_marker', Marker, queue_size=1)
+        self.pos_point_pub = rospy.Publisher('/trajectory/realpoints_marker', Marker, queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
@@ -423,9 +423,9 @@ class RotorsWrappers:
         #     z = 0.5 - robot_z
 
         # rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
-        goal.position.x = x
-        goal.position.y = y
-        goal.position.z = z
+        goal.position.x = 2#x
+        goal.position.y = 6#y
+        goal.position.z = 0#z
         goal.orientation.x = 0
         goal.orientation.y = 0
         goal.orientation.z = 0
@@ -525,7 +525,7 @@ class RotorsWrappers:
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 3) #extend time
+        self.reset_timer(r * 8) #extend time
 
         self.calculate_opt_trajectory_distance(start_pose.position)
 
@@ -555,10 +555,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
-            state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
-            #state_high = np.array([3.0, 3.0, 3.0], dtype=np.float32) #stable 24
-            #state_low = np.array([3.0, 3.0, 3.0], dtype=np.float32)
+            #state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
+            #state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
+            state_high = np.array([0.0, 0.0, 3.0], dtype=np.float32) #stable 24
+            state_low = np.array([0.0, 0.0, 3.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
