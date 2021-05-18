@@ -26,7 +26,7 @@ PCL_STACK_SIZE = 3 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_SECTOR_SIZE * PCL_STACK_SIZE
 MARKERS_MAX = 20
-CLOSED_ENV = False
+CLOSED_ENV = True
 
 class RotorsWrappers:
     def __init__(self):
@@ -49,7 +49,7 @@ class RotorsWrappers:
         pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
 
-        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
+        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
 
         if CLOSED_ENV:
