@@ -49,7 +49,7 @@ class RotorsWrappers:
         pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
 
-        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
+        state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
 
         if CLOSED_ENV:
@@ -224,7 +224,7 @@ class RotorsWrappers:
         else:
             path_reward = 0.11
             if new_obs[6] < 1:
-                path_reward = exp(new_obs[6]**2/(2*5)) - 1
+                path_reward = math.exp(new_obs[6]**2/(2*5)) - 1
 
 
         reference = self.reference[0]
@@ -318,7 +318,7 @@ class RotorsWrappers:
                 new_obs = np.concatenate((new_obs, pcl_features), axis=None)
                 #new_obs = self.scale_obs(new_obs)
             else:
-                new_obs = numpy.append(new_obs, self.calculate_cross_track_error())
+                new_obs = np.append(new_obs, self.calculate_cross_track_error())
 
 
             #print(new_obs)
