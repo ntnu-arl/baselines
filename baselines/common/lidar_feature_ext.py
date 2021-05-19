@@ -77,12 +77,24 @@ class LidarFeatureExtract:
 
         return xyz
 
+    def filter_ground_points(self, xyz):
+        '''
+        Reduce computation time by removing points very far away
+        '''
+        #transform to world frame
+        xyz = np.delete(xyz, xyz[:,2] > 0.1, axis=0)
+        xyz = np.delete(xyz, xyz[:,2] < -1.0, axis=0)
+
+        return xyz
+
 
     def xyz_array_to_pointcloud2(self, points, stamp=False, frame_id="delta"):
         '''
         Create a sensor_msgs.PointCloud2 from an array
         of points and publishes it.
         '''
+        #points = self.filter_ground_points(points)
+
         msg = PointCloud2()
         if stamp:
             msg.header.stamp = stamp #rospy.Time.now()
