@@ -15,6 +15,7 @@ from std_msgs.msg import Float64MultiArray
 from gym import core, spaces
 from gym.utils import seeding
 from baselines.common.lidar_feature_ext import LidarFeatureExtract
+from sensor_msgs.msg import PointCloud2, PointField
 
 import math
 import matplotlib
@@ -75,12 +76,30 @@ class RotorsWrappers:
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
         self.marker = Marker()
+        self.robot_trajectory_pcl = np.empty((0,3), np.float32)
 
         # Goal STUFF
         self.goal_number = -1
-        #simple path waypoints
-        self.goals = np.array([[-8,-2,3], [-8,2,3],[-8,7,3], [-4,7,3], [-4,2,3], [-4,-2,3], [-4,-8,3], [0,-8,3], [5,-8,3], [8,-8,3], [8,-4,3], [4,-4,3], [1,-4,3], [0, -2,3], [0, 0,3], [4, 0,3], [8, 0,3], [8, 4,3], [4, 4,3], [1, 4,3], [0, 5.8,3],[0, 7.5,3], [3, 7.5,3], [6, 7.5,3], [8, 7.5,3]])
 
+        #simple path waypoints
+        self.goals = np.array([[-8,-4,3], [-8,0,3], [-8,4,3],[-8,7,3], [-4,7,3], [-4,3,3], [-4,-1,3], [-4,-5,3], [-4,-8,3], [0,-8,3], [4,-8,3], [8,-8,3], [8,-4,3], [4,-4,3], [0,-4.3,3],[-0.2,-3,3], [0, 0,3], [4, 0.3,3], [8, 0,3], [8, 4,3], [4, 4,3], [0, 4.2,3], [0, 6,3]])
+
+        #twisty_path waypoints
+        #self.goals = np.array([[-8,-4,3],[-8,0,3], [-4,0,3], [-4,4,3], [-4,7,3], [-2.5,7,3], [-2.5,7,3], [0.5,5,3], [3,2.8,3], [5.5,4,3], [8,6,3], [7,1,3], [3, -2.5,3], [-0.2,-4.5,3], [-4,-4,3], [-4,-8,3], [0,-8,3], [4,-8,3], [7,-7,3]])
+
+        #large path with obstacles
+        #self.goals = np.array([[0,-5,3],[8,-3,3], [6,4,3], [-8,4,3]])
+
+        #large environment with random obstacles
+        #self.goals = np.array([[6,-7,3],[-4,3,3], [7,6,3], [4,0,3], [-5,0,3]])
+
+        #y path
+        #self.goals = np.array([[-2.5,0,3], [2.5,2.5,3], [7,7,3]])
+        #self.goals = np.array([[-2,0,3], [1.4,-2,3], [4,-5,3], [7,-8,3]])
+
+        #y path obstacles
+        #self.goals = np.array([[-4,-1,3], [2.5,3,3], [7,7,3]])
+        #self.goals = np.array([[-4,-1,3], [4.5,-4,3], [7,-7,3]])
 
         self.markerArray = MarkerArray()
         self.count = 0
@@ -99,6 +118,7 @@ class RotorsWrappers:
                                                  MarkerArray,
                                                  queue_size=1)
         self.pos_point_pub = rospy.Publisher('/trajectory/realpoints_marker', Marker, queue_size=1)
+        self.pos_point_pcl = rospy.Publisher('/trajectory/pcl_trajectory', PointCloud2, queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
@@ -197,9 +217,11 @@ class RotorsWrappers:
             pc_features_obs = np.sort(new_obs[6:]) #smallest dist is at index 0
 
             #the higher this is, the more negative reward when to close to obstacles
-            sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
-            sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
-            sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
+            #sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
+            #sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
+            #sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
+
+            sigmas = np.full(24, 0.24)
 
         reward_small_dist = 0.0
 
@@ -218,7 +240,8 @@ class RotorsWrappers:
             print('reach goal!')
             if self.goals.shape[0] > self.goal_number + 1:
                 self.goal_number += 1
-            self.set_new_wapoint()
+                self.set_new_wapoint()
+
         else:
             reward = reward - xT_Qx - reward_small_dist
             pass
@@ -248,6 +271,8 @@ class RotorsWrappers:
             robot_position = np.array([current_odom.pose.pose.position.x, current_odom.pose.pose.position.y, current_odom.pose.pose.position.z])
 
             self.draw_trajectory(robot_position)
+            self.robot_trajectory_pcl = np.vstack([self.robot_trajectory_pcl , robot_position])
+            self.draw_trajectory_pcl(self.robot_trajectory_pcl)
             self.robot_trajectory = np.vstack([self.robot_trajectory, robot_position])
             robot_twist = np.array([current_odom.twist.twist.linear.x, current_odom.twist.twist.linear.y, current_odom.twist.twist.linear.z])
             self.robot_velocity = np.vstack([self.robot_velocity, robot_twist])
@@ -436,7 +461,7 @@ class RotorsWrappers:
 
         # rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
         goal.position.x = 0#x
-        goal.position.y = 5#y
+        goal.position.y = 0#y
         goal.position.z = 0#z
         goal.orientation.x = 0
         goal.orientation.y = 0
@@ -465,13 +490,13 @@ class RotorsWrappers:
         marker.header.frame_id = "world"
         marker.type = marker.SPHERE
         marker.action = marker.ADD
-        marker.scale.x = 0.2
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
+        marker.scale.x = 0.4
+        marker.scale.y = 0.4
+        marker.scale.z = 0.4
         marker.color.a = 1.0
-        marker.color.r = 1.0
+        marker.color.r = 0.0
         marker.color.g = 1.0
-        marker.color.b = 0.0
+        marker.color.b = 1.0
         marker.pose = p
 
         rospy.loginfo('Draw new goal: (%.3f , %.3f , %.3f)', p.position.x, p.position.y, p.position.z)
@@ -544,11 +569,26 @@ class RotorsWrappers:
 
         # Fill in the new position of the robot
         if (pose == None):
-            # randomize initial position (TODO: angle?, velocity?)
-            #state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
-            #state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
-            state_high = np.array([-8, -7.0, 3.0], dtype=np.float32) #stable 24
-            state_low = np.array([-8, -7.0, 3.0], dtype=np.float32)
+            # simple path
+            state_high = np.array([-8.0, -8.0, 3.0], dtype=np.float32)
+            state_low = np.array([-8.0, -8.0, 3.0], dtype=np.float32)
+
+            #twisty path
+            #state_high = np.array([-8, -7.0, 3.0], dtype=np.float32) #stable 24
+            #state_low = np.array([-8, -7.0, 3.0], dtype=np.float32)
+
+            #large path obst and large env obstacles
+            #state_high = np.array([-8, -5.0, 3.0], dtype=np.float32)
+            #state_low = np.array([-8, -5.0, 3.0], dtype=np.float32)
+
+            #y path
+            #state_high = np.array([-8, 0.0, 3.0], dtype=np.float32)
+            #state_low = np.array([-8, -0.0, 3.0], dtype=np.float32)
+
+            #y path obstacles
+            #state_high = np.array([-8, -1.0, 3.0], dtype=np.float32)
+            #state_low = np.array([-8, -1.0, 3.0], dtype=np.float32)
+
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
@@ -637,6 +677,7 @@ class RotorsWrappers:
 
         #reset trajectory plot in rviz
         self.reset_draw_trajectory()
+        self.robot_trajectory_pcl = np.empty((0,3), np.float32)
 
         #reset goal
         self.goal_number = -1
@@ -925,6 +966,36 @@ class RotorsWrappers:
 
         # marker line points
         self.marker.points = []
+
+    def draw_trajectory_pcl(self, points, stamp=False, frame_id="world"):
+        '''
+        Create a sensor_msgs.PointCloud2 from an array
+        of points and publishes it.
+        '''
+
+        msg = PointCloud2()
+        if stamp:
+            msg.header.stamp = stamp #rospy.Time.now()
+        if frame_id:
+            msg.header.frame_id = frame_id
+        if len(points.shape) == 3:
+            msg.height = points.shape[1]
+            msg.width = points.shape[0]
+        else:
+            msg.height = 1
+            msg.width = len(points)
+        msg.fields = [
+            PointField('x', 0, PointField.FLOAT32, 1),
+            PointField('y', 4, PointField.FLOAT32, 1),
+            PointField('z', 8, PointField.FLOAT32, 1)]
+        msg.is_bigendian = False
+        msg.point_step = 12
+        msg.row_step = 12*points.shape[0]
+        msg.is_dense = int(np.isfinite(points).all())
+        msg.data = np.asarray(points, np.float32).tostring()
+
+        self.pos_point_pcl.publish(msg)
+
 
 
     def get_goal_coordinates(self, position):
