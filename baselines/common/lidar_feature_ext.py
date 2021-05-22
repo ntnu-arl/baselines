@@ -21,8 +21,10 @@ class LidarFeatureExtract:
 
     def __init__(self, sector_size, stack_size, bach_size_pc):
         #self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
-        self.pc_data = rospy.Subscriber("/os1_cloud_node/points", PointCloud2, self.store_pc_data)
-        
+        #self.pc_data = rospy.Subscriber("/os1_cloud_node/points", PointCloud2, self.store_pc_data)
+        self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
+
+
         self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
         self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=1)
 
@@ -45,7 +47,8 @@ class LidarFeatureExtract:
 
     def store_pc_data(self, data):
         points = np.array(list(read_points(data)))
-        xyz = np.array([(x, y, z) for x, y, z, _, _ , _, _ , _, _  in points]) # assumes XYZIR
+        #xyz = np.array([(x, y, z) for x, y, z, _, _ , _, _ , _, _  in points]) # assumes XYZIR
+        xyz = np.array([(x, y, z) for x, y, z, _, _   in points]) # assumes XYZIR
 
         if xyz.size > 0 and self.store_data:
             xyz = self.filter_points(xyz, -10.0, 10.0)
@@ -79,12 +82,24 @@ class LidarFeatureExtract:
 
         return xyz
 
+    def filter_ground_points(self, xyz):
+        '''
+        Reduce computation time by removing points very far away
+        '''
+        #transform to world frame
+        xyz = np.delete(xyz, xyz[:,2] > 0.1, axis=0)
+        xyz = np.delete(xyz, xyz[:,2] < -1.0, axis=0)
+
+        return xyz
+
 
     def xyz_array_to_pointcloud2(self, points, stamp=False, frame_id="delta"):
         '''
         Create a sensor_msgs.PointCloud2 from an array
         of points and publishes it.
         '''
+        #points = self.filter_ground_points(points)
+
         msg = PointCloud2()
         if stamp:
             msg.header.stamp = stamp #rospy.Time.now()

@@ -15,6 +15,7 @@ from std_msgs.msg import Float64MultiArray
 from gym import core, spaces
 from gym.utils import seeding
 from baselines.common.lidar_feature_ext import LidarFeatureExtract
+from sensor_msgs.msg import PointCloud2, PointField
 
 import math
 import matplotlib
@@ -25,7 +26,7 @@ from mpl_toolkits.mplot3d import Axes3D
 PCL_STACK_SIZE = 3 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_SECTOR_SIZE * PCL_STACK_SIZE
-MARKERS_MAX = 20
+MARKERS_MAX = 1000
 CLOSED_ENV = True
 
 class RotorsWrappers:
@@ -89,6 +90,16 @@ class RotorsWrappers:
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
         self.marker = Marker()
+        self.robot_trajectory_pcl = np.empty((0,3), np.float32)
+
+        # Goal STUFF
+        self.goal_number = -1
+
+        #simple path waypoints
+        self.goals =  np.empty((0,3), np.float32)
+
+        self.markerArray = MarkerArray()
+        self.count = 0
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
@@ -106,8 +117,9 @@ class RotorsWrappers:
         self.cmd_publisher = rospy.Publisher("/delta/command/rate_thrust", RateThrust)
         self.model_state_publisher = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size=1)
         self.sphere_marker_pub = rospy.Publisher('goal_published', MarkerArray, queue_size=1)
-        self.pos_point_pub = rospy.Publisher('/trajectory/realpoints_marker', Marker, queue_size=1)
         self.optimal_traj_marker_pub = rospy.Publisher('/trajectory/optimal_traj__marker', MarkerArray, queue_size=1)
+        self.pos_point_pub = rospy.Publisher('/trajectory/realpoints_marker', Marker, queue_size=1)
+        self.pos_point_pcl = rospy.Publisher('/trajectory/pcl_trajectory', PointCloud2, queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
@@ -117,9 +129,9 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 5.0) #stable24: 3.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 0.1) #stable24: 3.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.30) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 1.5) #0.35
 
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
@@ -136,9 +148,10 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 5.0) #stable24: 30
+        self.goal_reward = rospy.get_param('goal_reward', 30.0) #stable24: 30
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 10.0) #stable24: 30
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 30.0) #stable24: 30
+
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -210,6 +223,7 @@ class RotorsWrappers:
             else:
                 pc_features_obs = np.sort(new_obs[6:]) #smallest dist is at index 0
 
+
                 #the higher this is, the more negative reward when to close to obstacles
                 sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
                 sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
@@ -232,31 +246,25 @@ class RotorsWrappers:
 
         if not (np.array_equal(self.prev_reference, self.current_reference)):
             self.prev_reference = self.current_reference
+            self.goals = np.vstack([self.goals, self.current_reference])
             current_odom = self.robot_odom[0]
             reference_pos = Pose()
-            self.pause_physics_proxy(EmptyRequest())
 
-            reference_pos.position.x = self.current_reference[0]
-            reference_pos.position.y = self.current_reference[1]
-            reference_pos.position.z = self.current_reference[2]
-            reference_pos.orientation.x = 0
-            reference_pos.orientation.y = 0
-            reference_pos.orientation.z = 0
-            reference_pos.orientation.w = 1
-
-            self.draw_new_goal(reference_pos)
             self.store_entire_optimal_trajectory()
 
             #goal = self.generate_new_goal(new_position)
             self.unpause_physics_proxy(EmptyRequest())
 
-
         # reach goal?
-        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius) and (np.linalg.norm(new_obs[3:6]) < 0.30): #stable24 0.3
+        if (np.linalg.norm(new_obs[0:3]) < self.waypoint_radius):# and (np.linalg.norm(new_obs[3:6]) < 0.30): #stable24 0.3
             reward = reward + self.goal_reward
             self.done = False
             info = {'status':'reach goal'}
             print('reach goal!')
+            if self.goals.shape[0] > self.goal_number + 1:
+                self.goal_number += 1
+                self.set_new_wapoint()
+
         else:
             reward = reward - xT_Qx - reward_small_dist - path_reward
             pass
@@ -265,7 +273,7 @@ class RotorsWrappers:
         if self.collide:
             self.collide = False
             reward = reward - self.obstacle_max_penalty
-            self.done = True
+            self.done = False
             print('collided!')
             info = {'status':'collide'}
 
@@ -287,6 +295,8 @@ class RotorsWrappers:
             robot_position = np.array([current_odom.pose.pose.position.x, current_odom.pose.pose.position.y, current_odom.pose.pose.position.z])
 
             self.draw_trajectory(robot_position)
+            self.robot_trajectory_pcl = np.vstack([self.robot_trajectory_pcl , robot_position])
+            self.draw_trajectory_pcl(self.robot_trajectory_pcl)
             self.robot_trajectory = np.vstack([self.robot_trajectory, robot_position])
             robot_twist = np.array([current_odom.twist.twist.linear.x, current_odom.twist.twist.linear.y, current_odom.twist.twist.linear.z])
             self.robot_velocity = np.vstack([self.robot_velocity, robot_twist])
@@ -357,6 +367,7 @@ class RotorsWrappers:
 
     def contact_callback(self, msg):
         # Check inside the models states for robot's contact state
+        '''
         for i in range(len(msg.states)):
             if (msg.states[i].collision1_name == self.robot_collision_frame):
                 #print('Contact found!')
@@ -371,6 +382,7 @@ class RotorsWrappers:
                     #self.reset()
             else:
                 rospy.logdebug('Contact not found yet ...')
+        '''
 
     # Input:    robot_odom  : Odometry()
     #           goal        : Pose(), in vehicle frame
@@ -423,12 +435,7 @@ class RotorsWrappers:
         r_goal_in_vechile = R.from_euler('z', goal_euler_angles[0] - robot_euler_angles[0], degrees=False)
         goal_pos = np.array([goal.position.x, goal.position.y, goal.position.z])
         robot_pos = np.array([robot_pose.position.x, robot_pose.position.y, robot_pose.position.z])
-
-        reference = self.reference[0]
-        current_reference = np.array([reference.points[-1].x, reference.points[-1].y, reference.points[-1].z])
-        goal_pos_in_vehicle = current_reference - robot_pos
-
-        #goal_pos_in_vehicle = R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix().dot((goal_pos - robot_pos))
+        goal_pos_in_vehicle = R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix().dot((goal_pos - robot_pos))
         # print('goal_pos:', goal_pos)
         # print('robot_pos:', robot_pos)
         # print('R:', R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix())
@@ -490,11 +497,10 @@ class RotorsWrappers:
 
         # rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
 
-        reference = self.reference[0]
+        goal.position.x = 0#x
+        goal.position.y = 0#y
+        goal.position.z = 0#z
 
-        goal.position.x = reference.points[-1].x#x
-        goal.position.y = reference.points[-1].y#y
-        goal.position.z = reference.points[-1].z#z
         goal.orientation.x = 0
         goal.orientation.y = 0
         goal.orientation.z = 0
@@ -517,26 +523,24 @@ class RotorsWrappers:
         return current_goal, r
 
     def draw_new_goal(self, p):
-        #markerArray = MarkerArray()
-
         marker = Marker()
         marker.header.frame_id = "world"
         marker.type = marker.SPHERE
         marker.action = marker.ADD
-        marker.scale.x = 0.2
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
+        marker.scale.x = 0.4
+        marker.scale.y = 0.4
+        marker.scale.z = 0.4
         marker.color.a = 1.0
-        marker.color.r = 1.0
+        marker.color.r = 0.0
         marker.color.g = 1.0
-        marker.color.b = 0.0
+        marker.color.b = 1.0
         marker.pose = p
 
         rospy.loginfo('Draw new goal: (%.3f , %.3f , %.3f)', p.position.x, p.position.y, p.position.z)
 
         # We add the new marker to the MarkerArray, removing the oldest
         # marker from it when necessary
-        if (self.marker_counter > MARKERS_MAX):
+        if (self.count > MARKERS_MAX):
             self.markerArray.markers.pop(0)
 
         self.markerArray.markers.append(marker)
@@ -549,70 +553,45 @@ class RotorsWrappers:
         # Publish the MarkerArray
         self.sphere_marker_pub.publish(self.markerArray)
 
-        self.marker_counter += 1
+        self.count += 1
+
 
     def timer_callback(self, event):
         self.timeout = True
 
+
     def set_goal_generation_radius(self, radius):
         self.goal_generation_radius = radius
+
 
     def get_goal_generation_radius(self):
         return self.goal_generation_radius
 
-    def pause(self):
-        #rospy.loginfo('Pausing physics')
-        self.pause_physics_proxy(EmptyRequest())
 
-    def unpause(self):
-        #rospy.loginfo('Unpausing physics')
-        self.unpause_physics_proxy(EmptyRequest())
+    def set_new_wapoint(self):
+        new_goal = self.goals[self.goal_number]
+        goal = Pose()
+        goal.position.x = new_goal[0]#x
+        goal.position.y = new_goal[1]#y
+        goal.position.z = new_goal[2]#z
+        goal.orientation.x = 0
+        goal.orientation.y = 0
+        goal.orientation.z = 0
+        goal.orientation.w = 1
 
-    def reset(self):
-        # check if the start position collides with env
-        start_pose, collide = self.spawn_robot(None)
-        while collide:
-            #rospy.loginfo('INVALID start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
-            start_pose, collide = self.spawn_robot(None)
+        # Convert this goal into the world frame and set it as the current goal
+        #robot_pose = self.robot_odom[0].pose.pose
+        #robot_pose.pose.pose = robot_pose
+        robot_odom = Odometry()
+        robot_odom.pose.pose = self.robot_odom[0].pose.pose
+        current_goal = self.transform_goal_to_world_frame(robot_odom, goal)
+        self.get_goal_coordinates(current_goal.position)
 
-        #rospy.loginfo('New start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
-
-        # check if the end position collides with env: fix it, so stupid!
-        goal, r = self.generate_new_goal(start_pose)
-        _, collide = self.spawn_robot(goal)
-        while collide:
-            #rospy.loginfo('INVALID end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
-            goal, r = self.generate_new_goal(start_pose)
-            _, collide = self.spawn_robot(goal)
-
-        #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
-
-
-        # put the robot at the start pose
-        self.init_pose, _ = self.spawn_robot(start_pose)
         self.current_goal = goal
         self.draw_new_goal(goal)
 
         self.goal_training_publisher.publish(goal)
-        self.reset_timer(r * 300) #extend time
 
-        self.calculate_opt_trajectory_distance(start_pose.position)
-
-        #reset lidar data
-        self.lidar_data.store_data = False
-        self.lidar_data.reset_lidar_storage()
-        self.lidar_data.store_data = True
-
-        #reset trajectory plot in rviz
-        self.reset_draw_trajectory()
-        self.marker_counter = 0
-        self.markerArray = MarkerArray()
-        self.optimal_markerArray = MarkerArray()
-        self.optimal_marker_counter = 0
-
-        obs = self.get_new_obs()
-
-        return obs
 
     # Input:    position  : Pose()
     # Return:   position  : Pose(), in world frame
@@ -673,6 +652,65 @@ class RotorsWrappers:
             pass
         return new_position.pose, self.collide
 
+
+    def pause(self):
+        #rospy.loginfo('Pausing physics')
+        self.pause_physics_proxy(EmptyRequest())
+
+
+    def unpause(self):
+        #rospy.loginfo('Unpausing physics')
+        self.unpause_physics_proxy(EmptyRequest())
+
+
+    def reset(self):
+        # check if the start position collides with env
+        start_pose, collide = self.spawn_robot(None)
+        while collide:
+            #rospy.loginfo('INVALID start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
+            start_pose, collide = self.spawn_robot(None)
+
+        #rospy.loginfo('New start pose: (%.3f , %.3f , %.3f)', start_pose.position.x, start_pose.position.y, start_pose.position.z)
+
+        # check if the end position collides with env: fix it, so stupid!
+        goal, r = self.generate_new_goal(start_pose)
+        _, collide = self.spawn_robot(goal)
+        while collide:
+            #rospy.loginfo('INVALID end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
+            goal, r = self.generate_new_goal(start_pose)
+            _, collide = self.spawn_robot(goal)
+
+        #rospy.loginfo('New end goal: (%.3f , %.3f , %.3f)', goal.position.x, goal.position.y, goal.position.z)
+
+        # put the robot at the start pose
+        self.init_pose, _ = self.spawn_robot(start_pose)
+        self.current_goal = goal
+        self.draw_new_goal(goal)
+
+        self.goal_training_publisher.publish(goal)
+        self.reset_timer(r * 5000) #extend time
+
+        self.calculate_opt_trajectory_distance(start_pose.position)
+
+        #reset lidar data
+        self.lidar_data.store_data = False
+        self.lidar_data.reset_lidar_storage()
+        self.lidar_data.store_data = True
+
+        #reset trajectory plot in rviz
+        self.reset_draw_trajectory()
+        self.robot_trajectory_pcl = np.empty((0,3), np.float32)
+
+        #reset goal
+        self.goal_number = -1
+        self.markerArray = MarkerArray()
+        self.count = 0
+
+        obs = self.get_new_obs()
+
+        return obs
+
+
     def reset_timer(self, time):
         #rospy.loginfo('Resetting the timeout timer')
         if (self.timeout_timer != None):
@@ -695,9 +733,6 @@ class RotorsWrappers:
 
         return e_track
 
-    def set_data_vis(self, set):
-        self.data_vis = set
-        self.lidar_data.set_vis_in_rviz(set)
 
     def change_environment(self):
         self.pause_physics_proxy(EmptyRequest())
@@ -764,6 +799,13 @@ class RotorsWrappers:
             time.sleep(0.03) # since there is no ros wall rate option i python... (need time between diff pub)
 
         self.unpause_physics_proxy(EmptyRequest())
+
+ ##############################################################################################################################
+ #####################       PLOTS AND RVIZ STUFF BELOW ######################################################################
+
+    def set_data_vis(self, set):
+        self.data_vis = set
+        self.lidar_data.set_vis_in_rviz(set)
 
 
     def position_xyz_response(self):
@@ -928,13 +970,13 @@ class RotorsWrappers:
         self.marker.action = self.marker.ADD
 
         # marker scale
-        self.marker.scale.x = 0.03
-        self.marker.scale.y = 0.03
-        self.marker.scale.z = 0.03
+        self.marker.scale.x = 0.09
+        self.marker.scale.y = 0.09
+        self.marker.scale.z = 0.09
 
         # marker color
         self.marker.color.a = 1.0
-        self.marker.color.r = 1.0
+        self.marker.color.r = 0.0
         self.marker.color.g = 1.0
         self.marker.color.b = 0.0
 
@@ -970,6 +1012,34 @@ class RotorsWrappers:
 
         self.optimal_marker_counter += 1
 
+    def draw_trajectory_pcl(self, points, stamp=False, frame_id="world"):
+        '''
+        Create a sensor_msgs.PointCloud2 from an array
+        of points and publishes it.
+        '''
+
+        msg = PointCloud2()
+        if stamp:
+            msg.header.stamp = stamp #rospy.Time.now()
+        if frame_id:
+            msg.header.frame_id = frame_id
+        if len(points.shape) == 3:
+            msg.height = points.shape[1]
+            msg.width = points.shape[0]
+        else:
+            msg.height = 1
+            msg.width = len(points)
+        msg.fields = [
+            PointField('x', 0, PointField.FLOAT32, 1),
+            PointField('y', 4, PointField.FLOAT32, 1),
+            PointField('z', 8, PointField.FLOAT32, 1)]
+        msg.is_bigendian = False
+        msg.point_step = 12
+        msg.row_step = 12*points.shape[0]
+        msg.is_dense = int(np.isfinite(points).all())
+        msg.data = np.asarray(points, np.float32).tostring()
+
+        self.pos_point_pcl.publish(msg)
 
     def get_goal_coordinates(self, position):
         self.goal_coordinates = position

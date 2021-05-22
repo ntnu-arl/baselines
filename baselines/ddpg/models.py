@@ -67,11 +67,11 @@ class Critic(Model):
             _ = self.output_layer(self.network_builder.outputs[0])
         else:
             print('Critic: Load dagger model ', load_critic_dagger_path)
-            #self.model = tf.keras.models.load_model(load_critic_dagger_path)  
+            #self.model = tf.keras.models.load_model(load_critic_dagger_path)
             print('Critic size:', ob_shape[-1], ',', nb_actions)
             self.model = self.build_critic_model(ob_shape[-1] + nb_actions)
             self.model.summary()
-            self.model.load_weights(load_critic_dagger_path)              
+            self.model.load_weights(load_critic_dagger_path)
 
     @tf.function
     def call(self, obs, actions):
@@ -80,7 +80,7 @@ class Critic(Model):
             x = self.network_builder(x)
             return self.output_layer(x)
         else:
-            return self.model(x)    
+            return self.model(x)
 
     @property
     def output_vars(self):
@@ -98,4 +98,4 @@ class Critic(Model):
 
         model = tf.keras.Model(inputs=[x_input], outputs=[h])
 
-        return model     
+        return model
