@@ -28,6 +28,7 @@ PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_SECTOR_SIZE * PCL_STACK_SIZE
 MARKERS_MAX = 1000
 CLOSED_ENV = True
+OUSTER_DATA_SET = True
 
 class RotorsWrappers:
     def __init__(self):
@@ -90,7 +91,9 @@ class RotorsWrappers:
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
         self.marker = Marker()
+        self.marker_optimal_traj = Marker()
         self.robot_trajectory_pcl = np.empty((0,3), np.float32)
+        self.ref_counter = 0
 
         # Goal STUFF
         self.goal_number = -1
@@ -120,6 +123,7 @@ class RotorsWrappers:
         self.optimal_traj_marker_pub = rospy.Publisher('/trajectory/optimal_traj__marker', MarkerArray, queue_size=1)
         self.pos_point_pub = rospy.Publisher('/trajectory/realpoints_marker', Marker, queue_size=1)
         self.pos_point_pcl = rospy.Publisher('/trajectory/pcl_trajectory', PointCloud2, queue_size=1)
+        self.pos_optimal_traj_ouster = rospy.Publisher('/trajectory/ouster_optimal_marker', Marker, queue_size=1)
 
         self.pause_physics_proxy = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.unpause_physics_proxy = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
@@ -246,7 +250,13 @@ class RotorsWrappers:
 
         if not (np.array_equal(self.prev_reference, self.current_reference)):
             self.prev_reference = self.current_reference
-            self.goals = np.vstack([self.goals, self.current_reference])
+            if OUSTER_DATA_SET and self.ref_counter % 25 == 0:
+                self.goals = np.vstack([self.goals, self.current_reference])
+
+            if not OUSTER_DATA_SET:
+                self.goals = np.vstack([self.goals, self.current_reference])
+
+            self.ref_counter += 1
             current_odom = self.robot_odom[0]
             reference_pos = Pose()
 
@@ -290,7 +300,8 @@ class RotorsWrappers:
             # draw lidar features
             if CLOSED_ENV:
                 self.lidar_data.mark_feature_points(current_odom, self.lidar_data.extracted_features_points)
-
+            if OUSTER_DATA_SET:
+                self.draw_optimal_traj_ouster_data_set(self.current_reference)
             # record trajectory
             robot_position = np.array([current_odom.pose.pose.position.x, current_odom.pose.pose.position.y, current_odom.pose.pose.position.z])
 
@@ -700,11 +711,13 @@ class RotorsWrappers:
         #reset trajectory plot in rviz
         self.reset_draw_trajectory()
         self.robot_trajectory_pcl = np.empty((0,3), np.float32)
+        self.reset_draw_optimal_traj_ouster_data_set()
 
         #reset goal
         self.goal_number = -1
         self.markerArray = MarkerArray()
         self.count = 0
+        self.ref_counter = 0
 
         obs = self.get_new_obs()
 
@@ -991,8 +1004,9 @@ class RotorsWrappers:
 
     def store_entire_optimal_trajectory(self):
 
-        marker = self.reference[0]
+
         #marker = self.reference
+        marker = self.reference[0]
 
 
         # We add the new marker to the MarkerArray, removing the oldest
@@ -1043,6 +1057,46 @@ class RotorsWrappers:
 
     def get_goal_coordinates(self, position):
         self.goal_coordinates = position
+
+
+    def draw_optimal_traj_ouster_data_set(self, ref):
+        add_point = Point()
+        add_point.x = ref[0]
+        add_point.y = ref[1]
+        add_point.z = ref[2]
+
+        self.marker_optimal_traj.points.append(add_point)
+
+        self.pos_optimal_traj_ouster.publish(self.marker_optimal_traj)
+
+
+
+    def reset_draw_optimal_traj_ouster_data_set(self):
+        self.marker_optimal_traj = Marker()
+        self.marker_optimal_traj.header.frame_id = "world"
+        self.marker_optimal_traj.type = self.marker.LINE_STRIP
+        self.marker_optimal_traj.action = self.marker.ADD
+
+        # marker scale
+        self.marker_optimal_traj.scale.x = 0.09
+        self.marker_optimal_traj.scale.y = 0.09
+        self.marker_optimal_traj.scale.z = 0.09
+
+        # marker color
+        self.marker_optimal_traj.color.a = 1.0
+        self.marker_optimal_traj.color.r = 1.0
+        self.marker_optimal_traj.color.g = 0.0
+        self.marker_optimal_traj.color.b = 0.0
+
+        # marker orientaiton
+        self.marker_optimal_traj.pose.orientation.x = 0.0
+        self.marker_optimal_traj.pose.orientation.y = 0.0
+        self.marker_optimal_traj.pose.orientation.z = 0.0
+        self.marker_optimal_traj.pose.orientation.w = 1.0
+
+        # marker line points
+        self.marker_optimal_traj.points = []
+
 
 
     def render(self):

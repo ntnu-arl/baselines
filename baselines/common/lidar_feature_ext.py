@@ -7,7 +7,8 @@ from visualization_msgs.msg import MarkerArray
 from geometry_msgs.msg import Pose
 from nav_msgs.msg import Odometry
 from scipy.spatial.transform import Rotation as R
-##import open3d as o3d
+import open3d as o3d
+import pcl
 import numpy as np
 import math
 
@@ -21,8 +22,13 @@ class LidarFeatureExtract:
 
     def __init__(self, sector_size, stack_size, bach_size_pc):
         #self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
+
         #self.pc_data = rospy.Subscriber("/os1_cloud_node/points", PointCloud2, self.store_pc_data)
+        #self.pc_data = rospy.Subscriber("/passthrough/output", PointCloud2, self.store_pc_data)
         self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
+
+        #self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
+        self.all_pc_data = collections.deque([])
 
 
         self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
@@ -47,11 +53,33 @@ class LidarFeatureExtract:
 
     def store_pc_data(self, data):
         points = np.array(list(read_points(data)))
+        xyz = np.array([(x, y, z) for x, y, z, _, _   in points])
+        self.all_pc_data = np.vstack([self.all_pc_data, xyz])
+
+        #something here
+        self.run_lidar()
+
+
+    def run_lidar(self):
+
+        #data = self.filter_pass_points(data)
+        points = np.array(list(read_points(data)))
+        print(points.size)
+
         #xyz = np.array([(x, y, z) for x, y, z, _, _ , _, _ , _, _  in points]) # assumes XYZIR
         xyz = np.array([(x, y, z) for x, y, z, _, _   in points]) # assumes XYZIR
 
         if xyz.size > 0 and self.store_data:
-            xyz = self.filter_points(xyz, -10.0, 10.0)
+            #msg = self.xyz_array_to_pointcloud2(self, xyz, stamp=False, frame_id="world")
+            #elf.pc_data_stored.publish(xyz)
+
+
+            #print("intes filter: ", xyz.size)
+            #xyz = self.filter_points(xyz, -10.0, 10.0)
+
+            #xyz = self.filter_pass_points(xyz)
+            #print("xyz filter: ", xyz.size)
+            #mist filtering here
 
             if self.size_batch >= self.bach_size_pc:
                 #self.vis_points(self.batch_last_samples)
@@ -66,7 +94,8 @@ class LidarFeatureExtract:
 
         #visualize the filtered points in rviz
         if self.vis_pc:
-            self.xyz_array_to_pointcloud2(self.batch_last_samples)
+            msg = self.xyz_array_to_pointcloud2(self.batch_last_samples)
+            self.pc_data_stored.publish(msg)
 
 
     def filter_points(self, xyz, min_axis, max_axis):
@@ -82,18 +111,39 @@ class LidarFeatureExtract:
 
         return xyz
 
-    def filter_ground_points(self, xyz):
+    def filter_pass_points(self, xyz):
         '''
         Reduce computation time by removing points very far away
         '''
-        #transform to world frame
-        xyz = np.delete(xyz, xyz[:,2] > 0.1, axis=0)
-        xyz = np.delete(xyz, xyz[:,2] < -1.0, axis=0)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz)
+        voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.02)
+
+        _, ind = voxel_down_pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=0.7)
+
+        #self.display_inlier_outlier(voxel_down_pcd, ind)
+        inlier_cloud = voxel_down_pcd.select_by_index(ind)
+        pcd.points = o3d.utility.Vector3dVector(inlier_cloud.points)
+        xyz = np.asarray(pcd.points)
+
 
         return xyz
 
+    def display_inlier_outlier(self, cloud, ind):
+        inlier_cloud = cloud.select_by_index(ind)
+        outlier_cloud = cloud.select_by_index(ind, invert=True)
 
-    def xyz_array_to_pointcloud2(self, points, stamp=False, frame_id="delta"):
+        print("Showing outliers (red) and inliers (gray): ")
+        outlier_cloud.paint_uniform_color([1, 0, 0])
+        inlier_cloud.paint_uniform_color([0.8, 0.8, 0.8])
+        o3d.visualization.draw_geometries([inlier_cloud, outlier_cloud],
+                                          zoom=0.3412,
+                                          front=[0.4257, -0.2125, -0.8795],
+                                          lookat=[2.6172, 2.0475, 1.532],
+                                          up=[-0.0694, -0.9768, 0.2024])
+
+
+    def xyz_array_to_pointcloud2(self, points, stamp=False, frame_id="world"):
         '''
         Create a sensor_msgs.PointCloud2 from an array
         of points and publishes it.
@@ -121,7 +171,7 @@ class LidarFeatureExtract:
         msg.is_dense = int(np.isfinite(points).all())
         msg.data = np.asarray(points, np.float32).tostring()
 
-        self.pc_data_stored.publish(msg)
+        return msg
 
 
     def extracted_lidar_features(self):
