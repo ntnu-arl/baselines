@@ -118,9 +118,9 @@ class RotorsWrappers:
         self.R_action = np.diag(self.R_action)
         print('R_action:', self.R_action)
         self.R_action = np.array(list(self.R_action))
-        self.goal_reward = rospy.get_param('goal_reward', 20.0) #stable24: 30
+        self.goal_reward = rospy.get_param('goal_reward', 30.0) #stable24: 30
         self.time_penalty = rospy.get_param('time_penalty', 0.0)
-        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 20.0) #stable24: 30
+        self.obstacle_max_penalty = rospy.get_param('obstacle_max_penalty', 30.0) #stable24: 30
 
         self.max_acc_x = rospy.get_param('max_acc_x', 1.0)
         self.max_acc_y = rospy.get_param('max_acc_y', 1.0)
@@ -555,10 +555,10 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # randomize initial position (TODO: angle?, velocity?)
-            #state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
-            #state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
-            state_high = np.array([0.0, 0.0, 3.0], dtype=np.float32) #stable 24
-            state_low = np.array([0.0, 0.0, 3.0], dtype=np.float32)
+            state_high = np.array([2.0, 2.0, 5.0], dtype=np.float32)
+            state_low = np.array([-2.0, -2.0, 2.0], dtype=np.float32)
+            #state_high = np.array([0.0, 0.0, 3.0], dtype=np.float32) #stable 24
+            #state_low = np.array([0.0, 0.0, 3.0], dtype=np.float32)
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
             new_position.pose.position.y = new_state[1]
@@ -656,10 +656,10 @@ class RotorsWrappers:
     def change_environment_different_shapes(self):
         self.pause_physics_proxy(EmptyRequest())
 
-        nr_blocks = 1
-        nr_pyramids = 3
+        nr_blocks = 2
+        nr_pyramids = 2
         nr_stones = 3
-        nr_u = 4
+        nr_u = 1
         nr_shapes = nr_blocks + nr_pyramids + nr_stones + nr_u
 
         for i in range(nr_shapes):
