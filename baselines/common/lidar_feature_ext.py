@@ -12,6 +12,11 @@ import pcl
 import numpy as np
 import math
 
+#import sensor_msgs.point_cloud2 as pc2
+#import tf2_ros
+#import tf2_py as tf2
+#from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
+
 
 class LidarFeatureExtract:
 
@@ -19,6 +24,8 @@ class LidarFeatureExtract:
     stack_size = 3
     bach_size_pc = 10
     vis_pc = False
+    #tf_buffer = tf2_ros.Buffer()
+    #tf_listener = tf2_ros.TransformListener(tf_buffer)
 
     def __init__(self, sector_size, stack_size, bach_size_pc):
         #self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
@@ -28,7 +35,8 @@ class LidarFeatureExtract:
         self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
 
         #self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
-        self.all_pc_data = collections.deque([])
+        self.all_pc_data = np.empty((0,3), np.float32)
+        self.size_of_incoming_pcl = 0
 
 
         self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
@@ -51,31 +59,46 @@ class LidarFeatureExtract:
         self.vis_pc = False
 
 
-    def store_pc_data(self, data):
-        points = np.array(list(read_points(data)))
-        xyz = np.array([(x, y, z) for x, y, z, _, _   in points])
-        self.all_pc_data = np.vstack([self.all_pc_data, xyz])
+    def store_pc_data(self, msg):
+        '''
+        try:
+            trans = tf_buffer.lookup_transform("delta", msg.header.frame_id,
+                                               msg.header.stamp,
+                                               rospy.Duration(timeout))
+        except tf2.LookupException as ex:
+            rospy.logwarn(ex)
+            return
+        except tf2.ExtrapolationException as ex:
+            rospy.logwarn(ex)
+            return
+        cloud_out = do_transform_cloud(msg, trans)
+        '''
 
-        #something here
+        points = np.array(list(read_points(msg)))
+        xyz = np.array([(x, y, z) for x, y, z, _, _   in points])
+        self.size_of_incoming_pcl = xyz.shape[0]
+        self.all_pc_data = np.vstack([self.all_pc_data, xyz])
+        print("Big cloud: ", self.all_pc_data.shape)
+
+
         self.run_lidar()
 
 
     def run_lidar(self):
 
         #data = self.filter_pass_points(data)
-        points = np.array(list(read_points(data)))
-        print(points.size)
+        #points = np.array(list(read_points(data)))
+        #print(points.size)
 
         #xyz = np.array([(x, y, z) for x, y, z, _, _ , _, _ , _, _  in points]) # assumes XYZIR
-        xyz = np.array([(x, y, z) for x, y, z, _, _   in points]) # assumes XYZIR
+        #xyz = np.array([(x, y, z) for x, y, z, _, _   in points]) # assumes XYZIR
+        xyz = self.all_pc_data#[-self.size_of_incoming_pcl:]
+        print("Size of small: ", xyz.shape)
 
         if xyz.size > 0 and self.store_data:
-            #msg = self.xyz_array_to_pointcloud2(self, xyz, stamp=False, frame_id="world")
-            #elf.pc_data_stored.publish(xyz)
-
 
             #print("intes filter: ", xyz.size)
-            #xyz = self.filter_points(xyz, -10.0, 10.0)
+            xyz = self.filter_points(xyz, -10.0, 10.0)
 
             #xyz = self.filter_pass_points(xyz)
             #print("xyz filter: ", xyz.size)
@@ -143,7 +166,7 @@ class LidarFeatureExtract:
                                           up=[-0.0694, -0.9768, 0.2024])
 
 
-    def xyz_array_to_pointcloud2(self, points, stamp=False, frame_id="world"):
+    def xyz_array_to_pointcloud2(self, points, stamp=False, frame_id="delta"):
         '''
         Create a sensor_msgs.PointCloud2 from an array
         of points and publishes it.
@@ -244,6 +267,8 @@ class LidarFeatureExtract:
         marker.action = marker.DELETEALL
         markerArray.markers.append(marker)
         self.pc_features_publisher.publish(markerArray)
+        self.all_pc_data = np.empty((0,3), np.float32)
+        self.size_of_incoming_pcl = 0
 
 
     def subdivde_sector_to_stacks(self, sector):
@@ -409,6 +434,47 @@ class LidarFeatureExtract:
         current_point.orientation.w = current_point_quat[3]
 
         return current_point
+
+    def transform_goal_to_vehicle_frame(self, robot_odom, point):
+        goal_odom = Odometry()
+
+        r_goal = R.from_quat([0, 0, 0, 1])
+        goal_euler_angles = r_goal.as_euler('zyx', degrees=False)
+
+        robot_pose = robot_odom.pose.pose
+        r_robot = R.from_quat([robot_pose.orientation.x, robot_pose.orientation.y, robot_pose.orientation.z, robot_pose.orientation.w])
+        robot_euler_angles = r_robot.as_euler('zyx', degrees=False)
+
+        r_goal_in_vechile = R.from_euler('z', goal_euler_angles[0] - robot_euler_angles[0], degrees=False)
+        goal_pos = np.array([point.position.x, point.position.y, point.position.z])
+        robot_pos = np.array([robot_pose.position.x, robot_pose.position.y, robot_pose.position.z])
+        goal_pos_in_vehicle = R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix().dot((goal_pos - robot_pos))
+        # print('goal_pos:', goal_pos)
+        # print('robot_pos:', robot_pos)
+        # print('R:', R.from_euler('z', -robot_euler_angles[0], degrees=False).as_matrix())
+
+        goal_odom.header.stamp = robot_odom.header.stamp
+        goal_odom.header.frame_id = "vehicle_frame"
+        goal_odom.pose.pose.position.x = goal_pos_in_vehicle[0]
+        goal_odom.pose.pose.position.y = goal_pos_in_vehicle[1]
+        goal_odom.pose.pose.position.z = goal_pos_in_vehicle[2]
+        goal_quat_in_vehicle = r_goal_in_vechile.as_quat()
+        goal_odom.pose.pose.orientation.x = goal_quat_in_vehicle[0]
+        goal_odom.pose.pose.orientation.y = goal_quat_in_vehicle[1]
+        goal_odom.pose.pose.orientation.z = goal_quat_in_vehicle[2]
+        goal_odom.pose.pose.orientation.w = goal_quat_in_vehicle[3]
+
+        goal_odom.twist.twist.linear.x = -robot_odom.twist.twist.linear.x
+        goal_odom.twist.twist.linear.y = -robot_odom.twist.twist.linear.y
+        goal_odom.twist.twist.linear.z = -robot_odom.twist.twist.linear.z
+        goal_odom.twist.twist.angular.x = -robot_odom.twist.twist.angular.x
+        goal_odom.twist.twist.angular.y = -robot_odom.twist.twist.angular.y
+        goal_odom.twist.twist.angular.z = -robot_odom.twist.twist.angular.z
+
+
+        return goal_odom, robot_euler_angles
+
+
 
     def set_vis_in_rviz(self, set):
         '''
