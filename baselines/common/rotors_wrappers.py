@@ -188,9 +188,10 @@ class RotorsWrappers:
             pc_features_obs = np.sort(new_obs[6:]) #smallest dist is at index 0
 
             #the higher this is, the more negative reward when to close to obstacles
-            sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
-            sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
-            sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
+            #sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
+            #sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
+            #sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
+            sigmas = np.full(24, 0.21)
 
         reward_small_dist = 0.0
 
@@ -423,9 +424,9 @@ class RotorsWrappers:
         #     z = 0.5 - robot_z
 
         # rospy.loginfo_throttle(2, 'New Goal: (%.3f , %.3f , %.3f)', x, y, z)
-        goal.position.x = 2#x
-        goal.position.y = 6#y
-        goal.position.z = 0#z
+        goal.position.x = x
+        goal.position.y = y
+        goal.position.z = z
         goal.orientation.x = 0
         goal.orientation.y = 0
         goal.orientation.z = 0
@@ -455,13 +456,13 @@ class RotorsWrappers:
         marker.header.frame_id = "world"
         marker.type = marker.SPHERE
         marker.action = marker.ADD
-        marker.scale.x = 0.2
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
+        marker.scale.x = 0.4
+        marker.scale.y = 0.4
+        marker.scale.z = 0.4
         marker.color.a = 1.0
-        marker.color.r = 1.0
+        marker.color.r = 0.0
         marker.color.g = 1.0
-        marker.color.b = 0.0
+        marker.color.b = 1.0
         marker.pose = p
 
         rospy.loginfo('Draw new goal: (%.3f , %.3f , %.3f)', p.position.x, p.position.y, p.position.z)
@@ -855,13 +856,13 @@ class RotorsWrappers:
         self.marker.action = self.marker.ADD
 
         # marker scale
-        self.marker.scale.x = 0.03
-        self.marker.scale.y = 0.03
-        self.marker.scale.z = 0.03
+        self.marker.scale.x = 0.09
+        self.marker.scale.y = 0.09
+        self.marker.scale.z = 0.09
 
         # marker color
         self.marker.color.a = 1.0
-        self.marker.color.r = 1.0
+        self.marker.color.r = 0.0
         self.marker.color.g = 1.0
         self.marker.color.b = 0.0
 
