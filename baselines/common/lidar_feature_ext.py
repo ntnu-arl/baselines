@@ -12,11 +12,6 @@ import pcl
 import numpy as np
 import math
 
-#import sensor_msgs.point_cloud2 as pc2
-#import tf2_ros
-#import tf2_py as tf2
-#from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
-
 
 class LidarFeatureExtract:
 
@@ -24,17 +19,14 @@ class LidarFeatureExtract:
     stack_size = 3
     bach_size_pc = 10
     vis_pc = False
-    #tf_buffer = tf2_ros.Buffer()
-    #tf_listener = tf2_ros.TransformListener(tf_buffer)
 
     def __init__(self, sector_size, stack_size, bach_size_pc):
         #self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
 
         #self.pc_data = rospy.Subscriber("/os1_cloud_node/points", PointCloud2, self.store_pc_data)
-        #self.pc_data = rospy.Subscriber("/passthrough/output", PointCloud2, self.store_pc_data)
-        self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
-
         #self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
+
+        self.pc_data = rospy.Subscriber("/transformed_pcl", PointCloud2, self.store_pc_data)
         self.all_pc_data = np.empty((0,3), np.float32)
         self.size_of_incoming_pcl = 0
 
@@ -60,25 +52,13 @@ class LidarFeatureExtract:
 
 
     def store_pc_data(self, msg):
-        '''
-        try:
-            trans = tf_buffer.lookup_transform("delta", msg.header.frame_id,
-                                               msg.header.stamp,
-                                               rospy.Duration(timeout))
-        except tf2.LookupException as ex:
-            rospy.logwarn(ex)
-            return
-        except tf2.ExtrapolationException as ex:
-            rospy.logwarn(ex)
-            return
-        cloud_out = do_transform_cloud(msg, trans)
-        '''
-
         points = np.array(list(read_points(msg)))
         xyz = np.array([(x, y, z) for x, y, z, _, _   in points])
         self.size_of_incoming_pcl = xyz.shape[0]
-        self.all_pc_data = np.vstack([self.all_pc_data, xyz])
-        print("Big cloud: ", self.all_pc_data.shape)
+        self.all_pc_data = xyz #np.vstack([self.all_pc_data, xyz])
+
+        print(msg.header.frame_id)
+        #print("Big cloud: ", self.all_pc_data.shape)
 
 
         self.run_lidar()
@@ -93,16 +73,16 @@ class LidarFeatureExtract:
         #xyz = np.array([(x, y, z) for x, y, z, _, _ , _, _ , _, _  in points]) # assumes XYZIR
         #xyz = np.array([(x, y, z) for x, y, z, _, _   in points]) # assumes XYZIR
         xyz = self.all_pc_data#[-self.size_of_incoming_pcl:]
-        print("Size of small: ", xyz.shape)
+        #print("Size of small: ", xyz.shape)
 
         if xyz.size > 0 and self.store_data:
 
-            #print("intes filter: ", xyz.size)
-            xyz = self.filter_points(xyz, -10.0, 10.0)
 
-            #xyz = self.filter_pass_points(xyz)
-            #print("xyz filter: ", xyz.size)
-            #mist filtering here
+            xyz = self.filter_points(xyz, -10.0, 10.0)
+            #print("not filtered: ", xyz.size)
+
+            xyz = self.filter_pass_points(xyz)
+            #print("xyz filtered: ", xyz.size)
 
             if self.size_batch >= self.bach_size_pc:
                 #self.vis_points(self.batch_last_samples)
@@ -117,6 +97,7 @@ class LidarFeatureExtract:
 
         #visualize the filtered points in rviz
         if self.vis_pc:
+            a=1
             msg = self.xyz_array_to_pointcloud2(self.batch_last_samples)
             self.pc_data_stored.publish(msg)
 
