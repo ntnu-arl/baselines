@@ -82,10 +82,10 @@ class RotorsWrappers:
         self.goal_number = -1
 
         #simple path waypoints
-        self.goals = np.array([[-8,-4,3], [-8,0,3], [-8,4,3],[-8,7,3], [-4,7,3], [-4,3,3], [-4,-1,3], [-4,-5,3], [-4,-8,3], [0,-8,3], [4,-8,3], [8,-8,3], [8,-4,3], [4,-4,3], [0,-4.3,3],[-0.2,-3,3], [0, 0,3], [4, 0.3,3], [8, 0,3], [8, 4,3], [4, 4,3], [0, 4.2,3], [0, 6,3]])
+        #self.goals = np.array([[-8,-4,3], [-8,0,3], [-8,4,3],[-8,7,3], [-4,7,3], [-4,3,3], [-4,-1,3], [-4,-5,3], [-4,-8,3], [0,-8,3], [4,-8,3], [8,-8,3], [8,-4,3], [4,-4,3], [0,-4.3,3],[-0.2,-3,3], [0, 0,3], [4, 0.3,3], [8, 0,3], [8, 4,3], [4, 4,3], [0, 4.2,3], [0, 6,3]])
 
         #twisty_path waypoints
-        #self.goals = np.array([[-8,-4,3],[-8,0,3], [-4,0,3], [-4,4,3], [-4,7,3], [-2.5,7,3], [-2.5,7,3], [0.5,5,3], [3,2.8,3], [5.5,4,3], [8,6,3], [7,1,3], [3, -2.5,3], [-0.2,-4.5,3], [-4,-4,3], [-4,-8,3], [0,-8,3], [4,-8,3], [7,-7,3]])
+        #self.goals = np.array([[-8,-4,3],[-8,0,3], [-4,0,3], [-4,4,3], [-4,7,3], [-2.5,7,3], [-2.5,7,3], [0.5,5,3], [3,2.8,3], [5.5,4,3], [8,6,3], [8,1.5,3], [3, -2.5,3], [-0.2,-4.5,3], [-4,-4,3], [-4,-8,3], [0,-8,3], [4,-8,3], [7,-7,3]])
 
         #large path with obstacles
         #self.goals = np.array([[0,-5,3],[8,-3,3], [6,4,3], [-8,4,3]])
@@ -100,6 +100,9 @@ class RotorsWrappers:
         #y path obstacles
         #self.goals = np.array([[-4,-1,3], [2.5,3,3], [7,7,3]])
         #self.goals = np.array([[-4,-1,3], [4.5,-4,3], [7,-7,3]])
+
+        #z path obstacles
+        self.goals = np.array([[-6,2.5,3], [2, 0.5,3], [8, 6.5,3], [7, -6,3], [1, -5,5], [-5, -3,3]])
 
         self.markerArray = MarkerArray()
         self.count = 0
@@ -570,8 +573,8 @@ class RotorsWrappers:
         # Fill in the new position of the robot
         if (pose == None):
             # simple path
-            state_high = np.array([-8.0, -8.0, 3.0], dtype=np.float32)
-            state_low = np.array([-8.0, -8.0, 3.0], dtype=np.float32)
+            #state_high = np.array([-8.0, -8.0, 3.0], dtype=np.float32)
+            #state_low = np.array([-8.0, -8.0, 3.0], dtype=np.float32)
 
             #twisty path
             #state_high = np.array([-8, -7.0, 3.0], dtype=np.float32) #stable 24
@@ -588,6 +591,15 @@ class RotorsWrappers:
             #y path obstacles
             #state_high = np.array([-8, -1.0, 3.0], dtype=np.float32)
             #state_low = np.array([-8, -1.0, 3.0], dtype=np.float32)
+
+            #z path obstacles
+            #state_high = np.array([-7, -7.0, 3.0], dtype=np.float32)
+            #state_low = np.array([-7, -7.0, 3.0], dtype=np.float32)
+
+            state_high = np.array([0, 0.0, 5.0], dtype=np.float32)
+            state_low = np.array([0, 0.0, 5.0], dtype=np.float32)
+
+
 
             new_state = self.np_random.uniform(low=state_low, high=state_high, size=(3,))
             new_position.pose.position.x = new_state[0]
@@ -948,9 +960,9 @@ class RotorsWrappers:
         self.marker.action = self.marker.ADD
 
         # marker scale
-        self.marker.scale.x = 0.09
-        self.marker.scale.y = 0.09
-        self.marker.scale.z = 0.09
+        self.marker.scale.x = 0.03
+        self.marker.scale.y = 0.03
+        self.marker.scale.z = 0.03
 
         # marker color
         self.marker.color.a = 1.0

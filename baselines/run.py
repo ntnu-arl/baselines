@@ -17,6 +17,7 @@ from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
 from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
 from baselines import logger
 from importlib import import_module
+import time
 #from baselines.common.lidar_feature_ext import LidarFeatureExtract
 
 try:
@@ -221,7 +222,7 @@ def main(args):
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
 
-    show_in_rviz = True
+    show_in_rviz = False
     analyze_plots = False
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
@@ -263,6 +264,7 @@ def main(args):
         #sim_ctr = 0
 
         while True:
+            start_time = time.time()
             if new_goal:
                 reach_goal_trajectory = np.array([])
                 new_goal = False
@@ -306,6 +308,7 @@ def main(args):
                 new_goal = True
                 obs = env.reset()
                 obs = np.array([obs])
+            print("--- %s seconds ---" % (time.time() - start_time))
 
 
         #print(f'Avrg RMS is: {np.mean(avrg_RMS)}')
