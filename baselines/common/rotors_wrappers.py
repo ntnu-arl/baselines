@@ -1062,7 +1062,7 @@ class RotorsWrappers:
 
     def draw_optimal_traj_ouster_data_set(self, ref):
         self.points += 1
-        if self.points <= 99:
+        if self.points <= 99: #nr1: nr2: 70 nr3:99
             add_point = Point()
             add_point.x = ref[0]
             add_point.y = ref[1]
