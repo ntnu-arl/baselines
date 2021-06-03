@@ -27,7 +27,7 @@ PCL_STACK_SIZE = 3 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_SECTOR_SIZE * PCL_STACK_SIZE
 MARKERS_MAX = 1000
-CLOSED_ENV = True
+CLOSED_ENV = False
 OUSTER_DATA_SET = True
 
 class RotorsWrappers:
@@ -103,6 +103,7 @@ class RotorsWrappers:
 
         self.markerArray = MarkerArray()
         self.count = 0
+        self.points = 0
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
@@ -135,7 +136,7 @@ class RotorsWrappers:
     def get_params(self):
         self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 0.1) #stable24: 3.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 1.5) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.6) #0.35
 
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
@@ -1060,14 +1061,18 @@ class RotorsWrappers:
 
 
     def draw_optimal_traj_ouster_data_set(self, ref):
-        add_point = Point()
-        add_point.x = ref[0]
-        add_point.y = ref[1]
-        add_point.z = ref[2]
+        self.points += 1
+        if self.points <= 99:
+            add_point = Point()
+            add_point.x = ref[0]
+            add_point.y = ref[1]
+            add_point.z = ref[2]
 
-        self.marker_optimal_traj.points.append(add_point)
+            self.marker_optimal_traj.points.append(add_point)
 
-        self.pos_optimal_traj_ouster.publish(self.marker_optimal_traj)
+            self.pos_optimal_traj_ouster.publish(self.marker_optimal_traj)
+
+
 
 
 

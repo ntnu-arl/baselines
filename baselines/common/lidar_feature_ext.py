@@ -11,6 +11,7 @@ import open3d as o3d
 import pcl
 import numpy as np
 import math
+import collections
 
 
 class LidarFeatureExtract:
@@ -24,15 +25,19 @@ class LidarFeatureExtract:
         #self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
 
         #self.pc_data = rospy.Subscriber("/os1_cloud_node/points", PointCloud2, self.store_pc_data)
-        #self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
+        self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
 
-        self.pc_data = rospy.Subscriber("/transformed_pcl", PointCloud2, self.store_pc_data)
+        #self.pc_data = rospy.Subscriber("/trans/transformed_pcl_worold", PointCloud2, self.store_pc_data)
+        #self.pc_data = rospy.Subscriber("/trans/transformed_pcl_delta", PointCloud2, self.store_pc_data)
+        self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
+        self.velodyne = rospy.Subscriber("/velodyne_cloud_registered", PointCloud2, self.velodyne_data)
+        self.velo_filt = rospy.Publisher('/trans/velo_filt', PointCloud2, queue_size=1)
         self.all_pc_data = np.empty((0,3), np.float32)
         self.size_of_incoming_pcl = 0
+        self.robot_odom = collections.deque([])
 
-
-        self.pc_data_stored = rospy.Publisher('lidar_data_stored', PointCloud2, queue_size=1)
-        self.pc_features_publisher = rospy.Publisher('lidar_features', MarkerArray, queue_size=1)
+        self.pc_data_stored = rospy.Publisher('/trans/lidar_data_stored', PointCloud2, queue_size=1)
+        self.pc_features_publisher = rospy.Publisher('/lidar_features', MarkerArray, queue_size=1)
 
         self.batch_last_samples = np.empty((0,3), np.float32)
         self.size_batch = 0
@@ -47,24 +52,34 @@ class LidarFeatureExtract:
         self.extracted_features = np.full(self.number_of_features, self.max_dist_search)
         self.extracted_features_points = np.empty((0,3), np.int32)
 
-        self.store_data = False
+        self.store_data = True
         self.vis_pc = False
 
 
+    def odom_callback(self, msg):
+        #print("received odom msg")
+        self.robot_odom.appendleft(msg)
+        if (len(self.robot_odom) > 10): # save the last 10 odom msg
+            self.robot_odom.pop()
+
+    def velodyne_data(self, msg):
+        p = np.array(list(read_points(msg)))
+        xyz_velo = np.array([(x, y, z) for x, y, z, _  in p])
+        #print("not filtered: ",xyz_velo.size)
+        velo_filt = self.filter_pass_points(xyz_velo)
+        #print("filtered: ", velo_filt.size)
+        velo_pcl = self.xyz_array_to_pointcloud2(velo_filt, frame_id="camera_init")
+        self.velo_filt.publish(velo_pcl)
+
+
     def store_pc_data(self, msg):
+        #print(msg.header.frame_id)
         points = np.array(list(read_points(msg)))
-        xyz = np.array([(x, y, z) for x, y, z, _, _   in points])
+        xyz = np.empty((0,3), np.float32)#np.array([(x, y, z) for x, y, z  in points])
+
         self.size_of_incoming_pcl = xyz.shape[0]
-        self.all_pc_data = xyz #np.vstack([self.all_pc_data, xyz])
 
-        print(msg.header.frame_id)
-        #print("Big cloud: ", self.all_pc_data.shape)
-
-
-        self.run_lidar()
-
-
-    def run_lidar(self):
+        #self.all_pc_data = xyz #np.vstack([self.all_pc_data, xyz])
 
         #data = self.filter_pass_points(data)
         #points = np.array(list(read_points(data)))
@@ -72,24 +87,26 @@ class LidarFeatureExtract:
 
         #xyz = np.array([(x, y, z) for x, y, z, _, _ , _, _ , _, _  in points]) # assumes XYZIR
         #xyz = np.array([(x, y, z) for x, y, z, _, _   in points]) # assumes XYZIR
-        xyz = self.all_pc_data#[-self.size_of_incoming_pcl:]
+        #xyz = self.all_pc_data#[-self.size_of_incoming_pcl:]
         #print("Size of small: ", xyz.shape)
 
-        if xyz.size > 0 and self.store_data:
+        if xyz.size > 0:
 
 
             xyz = self.filter_points(xyz, -10.0, 10.0)
             #print("not filtered: ", xyz.size)
 
-            xyz = self.filter_pass_points(xyz)
+            #xyz = self.filter_pass_points(xyz)
             #print("xyz filtered: ", xyz.size)
+            if self.store_data:
+                if self.size_batch >= self.bach_size_pc:
+                    #self.vis_points(self.batch_last_samples)
+                    self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
 
-            if self.size_batch >= self.bach_size_pc:
-                #self.vis_points(self.batch_last_samples)
-                self.batch_last_samples = np.delete(self.batch_last_samples , slice(0, xyz.shape[0]), axis=0)
-
-            self.batch_last_samples = np.vstack([self.batch_last_samples, xyz])
-            xyz = np.empty((0,3), np.int32)
+                self.batch_last_samples = np.vstack([self.batch_last_samples, xyz])
+                xyz = np.empty((0,3), np.int32)
+            else:
+                self.batch_last_samples = xyz
 
             self.extracted_lidar_features()
 
@@ -97,7 +114,6 @@ class LidarFeatureExtract:
 
         #visualize the filtered points in rviz
         if self.vis_pc:
-            a=1
             msg = self.xyz_array_to_pointcloud2(self.batch_last_samples)
             self.pc_data_stored.publish(msg)
 
@@ -121,9 +137,9 @@ class LidarFeatureExtract:
         '''
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(xyz)
-        voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.02)
+        voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.15)
 
-        _, ind = voxel_down_pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=0.7)
+        _, ind = voxel_down_pcd.remove_statistical_outlier(nb_neighbors=40, std_ratio=.01)
 
         #self.display_inlier_outlier(voxel_down_pcd, ind)
         inlier_cloud = voxel_down_pcd.select_by_index(ind)
@@ -132,6 +148,25 @@ class LidarFeatureExtract:
 
 
         return xyz
+
+    def filter_points_odom(self, xyz):
+        '''
+        Reduce computation time by removing points very far away
+        '''
+        max_axis = 10
+        min_axis = max_axis
+        current_odom = self.robot_odom[0]
+        robot_position = np.array([current_odom.pose.pose.position.x, current_odom.pose.pose.position.y, current_odom.pose.pose.position.z])
+
+        xyz = np.delete(xyz, xyz[:,0] > robot_position[0] + max_axis, axis=0)
+        xyz = np.delete(xyz, xyz[:,0] < robot_position[0] - min_axis, axis=0)
+        xyz = np.delete(xyz, xyz[:,1] > robot_position[1] + max_axis, axis=0)
+        xyz = np.delete(xyz, xyz[:,1] < robot_position[1] - min_axis, axis=0)
+        xyz = np.delete(xyz, xyz[:,2] > robot_position[2] + max_axis, axis=0)
+        xyz = np.delete(xyz, xyz[:,2] < robot_position[2] - min_axis, axis=0)
+
+        return xyz
+
 
     def display_inlier_outlier(self, cloud, ind):
         inlier_cloud = cloud.select_by_index(ind)
