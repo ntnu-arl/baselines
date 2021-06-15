@@ -27,7 +27,7 @@ PCL_STACK_SIZE = 3 #needs to be min 1
 PCL_SECTOR_SIZE = 8 #needs to be min 1
 PCL_FEATURE_SIZE = PCL_SECTOR_SIZE * PCL_STACK_SIZE
 MARKERS_MAX = 1000
-CLOSED_ENV = False
+CLOSED_ENV = True
 OUSTER_DATA_SET = True
 
 class RotorsWrappers:
@@ -134,9 +134,9 @@ class RotorsWrappers:
         return [seed]
 
     def get_params(self):
-        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 0.1) #stable24: 3.0
+        self.initial_goal_generation_radius = rospy.get_param('initial_goal_generation_radius', 0.0) #stable24: 3.0
         self.set_goal_generation_radius(self.initial_goal_generation_radius)
-        self.waypoint_radius = rospy.get_param('waypoint_radius', 0.6) #0.35
+        self.waypoint_radius = rospy.get_param('waypoint_radius', 1.6) #0.35
 
         self.robot_collision_frame = rospy.get_param(
             'robot_collision_frame',
@@ -991,8 +991,8 @@ class RotorsWrappers:
         # marker color
         self.marker.color.a = 1.0
         self.marker.color.r = 0.0
-        self.marker.color.g = 1.0
-        self.marker.color.b = 0.0
+        self.marker.color.g = 0.0
+        self.marker.color.b = 1.0
 
         # marker orientaiton
         self.marker.pose.orientation.x = 0.0
@@ -1062,7 +1062,7 @@ class RotorsWrappers:
 
     def draw_optimal_traj_ouster_data_set(self, ref):
         self.points += 1
-        if self.points <= 99: #nr1: nr2: 70 nr3:99
+        if self.points <= 331: #nr1: 331 nr2: 330 nr3:99
             add_point = Point()
             add_point.x = ref[0]
             add_point.y = ref[1]

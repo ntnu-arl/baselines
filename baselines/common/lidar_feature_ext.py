@@ -25,10 +25,13 @@ class LidarFeatureExtract:
         #self.pc_data = rospy.Subscriber("/os1_points", PointCloud2, self.store_pc_data)
 
         #self.pc_data = rospy.Subscriber("/os1_cloud_node/points", PointCloud2, self.store_pc_data)
-        self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
-
+        #self.pc_data = rospy.Subscriber("/os1_node/points_raw", PointCloud2, self.store_pc_data)
         #self.pc_data = rospy.Subscriber("/trans/transformed_pcl_worold", PointCloud2, self.store_pc_data)
         #self.pc_data = rospy.Subscriber("/trans/transformed_pcl_delta", PointCloud2, self.store_pc_data)
+        self.pc_data = rospy.Subscriber("/trans/lidar_data_stored", PointCloud2, self.store_pc_data)
+
+
+
         self.odom_subscriber = rospy.Subscriber('/delta/odometry_sensor1/odometry', Odometry, self.odom_callback)
         self.velodyne = rospy.Subscriber("/velodyne_cloud_registered", PointCloud2, self.velodyne_data)
         self.velo_filt = rospy.Publisher('/trans/velo_filt', PointCloud2, queue_size=1)
