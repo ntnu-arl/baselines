@@ -46,6 +46,7 @@ class RotorsWrappers:
         self.lidar_data = LidarFeatureExtract(PCL_SECTOR_SIZE, PCL_STACK_SIZE, 1)
         pcl_feature_high = 10 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
         pcl_feature_low = 0 * np.ones(PCL_FEATURE_SIZE, dtype=np.float32)
+        self.pcl_feature = np.array([])
 
         state_robot_high = np.array([5.0, 5.0, 5.0, 5.0, 5.0, 5.0], dtype=np.float32)
         state_robot_low = -state_robot_high
@@ -61,20 +62,19 @@ class RotorsWrappers:
         self.timeout = False
         self.timeout_timer = None
 
-        self.data_vis = False
-
         self.robot_odom = collections.deque([])
         self.msg_cnt = 0
-        self.pcl_feature = np.array([])
 
         self.sleep_rate = rospy.Rate(self.control_rate)
 
         self.seed()
 
+        #Plot stuff
         self.shortest_dist_line = []
         self.robot_trajectory = np.array([0, 0, 0])
         self.robot_velocity = np.array([0, 0, 0])
         self.marker = Marker()
+        self.data_vis = False
 
         # ROS publishers/subcribers
         self.contact_subcriber = rospy.Subscriber("/delta/delta_contact", ContactsState, self.contact_callback)
@@ -175,11 +175,11 @@ class RotorsWrappers:
             sigmas1 = np.full(8, 0.18)#0.16
             sigmas2 = np.full(8, 0.22)#0.22
             sigmas3 = sigmas1
-            #This worked for stable 24
+            
+            #These params below worked for 24 feat in the first 2 env
             #sigmas1 = np.full(8, 0.20)
             #sigmas2 = np.array([0.35, 0.25, 0.25, 0.24, 0.2, 0.2, 0.2, 0.2])
             #sigmas3 = sigmas1
-
 
             sigmas = np.concatenate((sigmas1, sigmas2, sigmas3), axis=None)
             pc_features_obs = np.concatenate((pc_features_obs_layer1, pc_features_obs_layer2, pc_features_obs_layer3), axis=None)
@@ -191,13 +191,13 @@ class RotorsWrappers:
             #sigmas1 = np.array([0.35, 0.25, 0.25, 0.24])
             #sigmas2 = np.full(PCL_FEATURE_SIZE - len(sigmas1), 0.2)
             #sigmas = np.concatenate((sigmas1, sigmas2), axis=None)
-            sigmas = np.full(24, 0.21)
+            sigmas = np.full(PCL_FEATURE_SIZE, 0.21)
 
         reward_small_dist = 0.0
 
         for i in range(len(pc_features_obs)):
             #Sum clerance rewards to the closest obstacle
-            #if pc_features_obs[i] < 1.5:
+  
             reward_small_dist += 1/(sigmas[i]*math.sqrt(2*math.pi))*math.exp(-(pc_features_obs[i]**2)/(2*sigmas[i]**2))
 
         #print("Smallest dist:", reward_small_dist)
@@ -281,7 +281,6 @@ class RotorsWrappers:
         new_obs = np.concatenate((new_obs1, new_obs2), axis=None)
 
         return new_obs
-
 
     def odom_callback(self, msg):
         #print("received odom msg")
@@ -622,11 +621,7 @@ class RotorsWrappers:
         e_track = np.linalg.norm(dist_ac*delta_xyz + target - robot_position)
 
         return e_track
-
-    def set_data_vis(self, set):
-        self.data_vis = set
-        self.lidar_data.set_vis_in_rviz(set)
-
+    
     def change_environment(self):
         self.pause_physics_proxy(EmptyRequest())
         number_of_stat_objects = 14
@@ -693,6 +688,11 @@ class RotorsWrappers:
 
         self.unpause_physics_proxy(EmptyRequest())
 
+    ####### PLOT STUFF BELOW ##############
+    
+    def set_data_vis(self, set):
+        self.data_vis = set
+        self.lidar_data.set_vis_in_rviz(set)
 
     def position_xyz_response(self):
         fig,ax = plt.subplots(3,1,clear=True)
